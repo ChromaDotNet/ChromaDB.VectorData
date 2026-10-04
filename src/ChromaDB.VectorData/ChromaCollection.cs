@@ -207,20 +207,37 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
             throw new NotSupportedException(VectorDataStrings.IncludeVectorsNotSupportedWithEmbeddingGeneration);
         }
 
-        var entries = await RunOperationAsync(
-            OperationName,
-            () => RunOnCollectionAsync(collection => _chromaClient.GetAsync(
-                collection,
-                ids,
-                where: null,
-                limit: null,
-                offset: null,
-                GetInclude(includeVectors),
-                cancellationToken), cancellationToken)).ConfigureAwait(false);
-
-        foreach (var entry in entries)
+        foreach (var page in GetPages(ids, _chromaClient.ReadPageSize))
         {
-            yield return _mapper.MapFromStorageToDataModel(entry.Id, entry.Embeddings, entry.Metadata, includeVectors);
+            var entries = await RunOperationAsync(
+                OperationName,
+                () => RunOnCollectionAsync(collection => _chromaClient.GetAsync(
+                    collection,
+                    page,
+                    where: null,
+                    limit: null,
+                    offset: null,
+                    GetInclude(includeVectors),
+                    cancellationToken), cancellationToken)).ConfigureAwait(false);
+
+            foreach (var entry in entries)
+            {
+                yield return _mapper.MapFromStorageToDataModel(entry.Id, entry.Embeddings, entry.Metadata, includeVectors);
+            }
+        }
+    }
+
+    private static IEnumerable<List<string>> GetPages(List<string> ids, int? pageSize)
+    {
+        if (pageSize is not { } size || ids.Count <= size)
+        {
+            yield return ids;
+            yield break;
+        }
+
+        for (var start = 0; start < ids.Count; start += size)
+        {
+            yield return ids.GetRange(start, Math.Min(size, ids.Count - start));
         }
     }
 
@@ -416,20 +433,32 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
             yield break;
         }
 
-        var entries = await RunOperationAsync(
-            "Get",
-            () => RunOnCollectionAsync(collection => _chromaClient.GetAsync(
-                collection,
-                chromaFilter.Ids,
-                chromaFilter.Where,
-                limit: top,
-                offset: options.Skip,
-                GetInclude(options.IncludeVectors),
-                cancellationToken), cancellationToken)).ConfigureAwait(false);
-
-        foreach (var entry in entries)
+        // Read in pages of the read page size, if any: Chroma Cloud returns at most 300 records per request.
+        var pageSize = _chromaClient.ReadPageSize ?? top;
+        for (var read = 0; read < top;)
         {
-            yield return _mapper.MapFromStorageToDataModel(entry.Id, entry.Embeddings, entry.Metadata, options.IncludeVectors);
+            var limit = Math.Min(pageSize, top - read);
+            var entries = await RunOperationAsync(
+                "Get",
+                () => RunOnCollectionAsync(collection => _chromaClient.GetAsync(
+                    collection,
+                    chromaFilter.Ids,
+                    chromaFilter.Where,
+                    limit,
+                    offset: options.Skip + read,
+                    GetInclude(options.IncludeVectors),
+                    cancellationToken), cancellationToken)).ConfigureAwait(false);
+
+            foreach (var entry in entries)
+            {
+                yield return _mapper.MapFromStorageToDataModel(entry.Id, entry.Embeddings, entry.Metadata, options.IncludeVectors);
+            }
+
+            read += entries.Count;
+            if (entries.Count < limit)
+            {
+                break;
+            }
         }
     }
 

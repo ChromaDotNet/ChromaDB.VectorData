@@ -65,6 +65,13 @@ internal class MockableChromaClient : IDisposable
     /// </summary>
     public string? DatabaseName => _chromaClient?.Options.Database;
 
+    /// <summary>
+    /// Gets the number of records to read per request, the batch size of the writes when the caller sets one with
+    /// <c>WithBatchSplitting(maxBatchSize)</c>, or <see langword="null"/> to read in one request. Chroma Cloud reads and
+    /// writes at most 300 records per request.
+    /// </summary>
+    public int? ReadPageSize => _chromaClient?.Options is { BatchSplitting: true, MaxBatchSize: { } size } ? size : null;
+
     public void Dispose()
     {
         if (_ownedHttpClient is not null && Interlocked.Decrement(ref _referenceCount) == 0)

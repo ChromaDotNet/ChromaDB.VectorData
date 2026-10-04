@@ -71,6 +71,10 @@ services.AddChromaVectorStore(new ChromaConfigurationOptions("https://api.trychr
     .WithBatchSplitting(maxBatchSize: 300));
 ```
 
+## Chroma Cloud
+
+Connect with the options of the client: the API key goes in the `X-Chroma-Token` header, with the tenant and the database of the Chroma Cloud dashboard. Chroma Cloud reads and writes at most 300 records per request: with `WithBatchSplitting(maxBatchSize: 300)`, the client writes in batches of 300 and the provider reads in pages of 300. A search returns at most 300 results, `top` plus `Skip` included.
+
 ## Supported
 
 - Keys: `string` and `Guid`.
