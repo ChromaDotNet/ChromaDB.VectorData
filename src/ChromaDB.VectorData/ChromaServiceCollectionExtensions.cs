@@ -20,27 +20,27 @@ public static class ChromaServiceCollectionExtensions
 
     /// <summary>
     /// Registers a <see cref="ChromaVectorStore"/> as <see cref="VectorStore"/>
-    /// with <see cref="ChromaConfigurationOptions"/> returned by <paramref name="chromaOptionsProvider"/>
-    /// or retrieved from the dependency injection container if <paramref name="chromaOptionsProvider"/> was not provided.
+    /// with <see cref="ChromaClient"/> returned by <paramref name="clientProvider"/>
+    /// or retrieved from the dependency injection container if <paramref name="clientProvider"/> was not provided.
     /// </summary>
-    /// <inheritdoc cref="AddKeyedChromaVectorStore(IServiceCollection, object?, Func{IServiceProvider, ChromaConfigurationOptions}?, Func{IServiceProvider, ChromaVectorStoreOptions}?, ServiceLifetime)"/>
+    /// <inheritdoc cref="AddKeyedChromaVectorStore(IServiceCollection, object?, Func{IServiceProvider, ChromaClient}?, Func{IServiceProvider, ChromaVectorStoreOptions}?, ServiceLifetime)"/>
     [RequiresUnreferencedCode(DynamicCodeMessage)]
     [RequiresDynamicCode(UnreferencedCodeMessage)]
     public static IServiceCollection AddChromaVectorStore(
         this IServiceCollection services,
-        Func<IServiceProvider, ChromaConfigurationOptions>? chromaOptionsProvider = default,
+        Func<IServiceProvider, ChromaClient>? clientProvider = default,
         Func<IServiceProvider, ChromaVectorStoreOptions>? optionsProvider = default,
         ServiceLifetime lifetime = ServiceLifetime.Singleton)
-        => AddKeyedChromaVectorStore(services, serviceKey: null, chromaOptionsProvider, optionsProvider, lifetime);
+        => AddKeyedChromaVectorStore(services, serviceKey: null, clientProvider, optionsProvider, lifetime);
 
     /// <summary>
     /// Registers a keyed <see cref="ChromaVectorStore"/> as <see cref="VectorStore"/>
-    /// with <see cref="ChromaConfigurationOptions"/> returned by <paramref name="chromaOptionsProvider"/>
-    /// or retrieved from the dependency injection container if <paramref name="chromaOptionsProvider"/> was not provided.
+    /// with <see cref="ChromaClient"/> returned by <paramref name="clientProvider"/>
+    /// or retrieved from the dependency injection container if <paramref name="clientProvider"/> was not provided.
     /// </summary>
     /// <param name="services">The <see cref="IServiceCollection"/> to register the <see cref="ChromaVectorStore"/> on.</param>
     /// <param name="serviceKey">The key with which to associate the vector store.</param>
-    /// <param name="chromaOptionsProvider">The <see cref="ChromaConfigurationOptions"/> provider.</param>
+    /// <param name="clientProvider">The <see cref="ChromaClient"/> provider.</param>
     /// <param name="optionsProvider">Options provider to further configure the <see cref="ChromaVectorStore"/>.</param>
     /// <param name="lifetime">The service lifetime for the store. Defaults to <see cref="ServiceLifetime.Singleton"/>.</param>
     /// <returns>Service collection.</returns>
@@ -49,25 +49,19 @@ public static class ChromaServiceCollectionExtensions
     public static IServiceCollection AddKeyedChromaVectorStore(
         this IServiceCollection services,
         object? serviceKey,
-        Func<IServiceProvider, ChromaConfigurationOptions>? chromaOptionsProvider = default,
+        Func<IServiceProvider, ChromaClient>? clientProvider = default,
         Func<IServiceProvider, ChromaVectorStoreOptions>? optionsProvider = default,
         ServiceLifetime lifetime = ServiceLifetime.Singleton)
     {
         Throw.IfNull(services);
 
-        services.Add(new ServiceDescriptor(typeof(ChromaVectorStore), serviceKey, (sp, _) =>
+        return AddKeyedChromaVectorStore(services, serviceKey, lifetime, (sp, options) =>
         {
-            var chromaOptions = chromaOptionsProvider is null ? sp.GetRequiredService<ChromaConfigurationOptions>() : chromaOptionsProvider(sp);
-            var options = GetStoreOptions(sp, optionsProvider);
+            var client = clientProvider is null ? sp.GetRequiredService<ChromaClient>() : clientProvider(sp);
 
-            // The store creates its own HttpClient, so it owns it.
-            return new ChromaVectorStore(chromaOptions, new HttpClient(), ownsClient: true, options);
-        }, lifetime));
-
-        services.Add(new ServiceDescriptor(typeof(VectorStore), serviceKey,
-            static (sp, key) => sp.GetRequiredKeyedService<ChromaVectorStore>(key), lifetime));
-
-        return services;
+            // The client was restored from the DI container, so we do not own it.
+            return new ChromaVectorStore(client, options);
+        }, optionsProvider);
     }
 
     /// <summary>
@@ -103,38 +97,58 @@ public static class ChromaServiceCollectionExtensions
         ChromaVectorStoreOptions? options = default,
         ServiceLifetime lifetime = ServiceLifetime.Singleton)
     {
+        Throw.IfNull(services);
         Throw.IfNullOrWhitespace(uri);
 
-        return AddKeyedChromaVectorStore(services, serviceKey, _ => new ChromaConfigurationOptions(uri), sp => options!, lifetime);
+        // The store creates its own HttpClient, so it owns it.
+        return AddKeyedChromaVectorStore(services, serviceKey, lifetime,
+            (_, storeOptions) => new ChromaVectorStore(new ChromaConfigurationOptions(uri), new HttpClient(), ownsClient: true, storeOptions),
+            _ => options!);
+    }
+
+    private static IServiceCollection AddKeyedChromaVectorStore(
+        IServiceCollection services,
+        object? serviceKey,
+        ServiceLifetime lifetime,
+        Func<IServiceProvider, ChromaVectorStoreOptions?, ChromaVectorStore> storeFactory,
+        Func<IServiceProvider, ChromaVectorStoreOptions?>? optionsProvider)
+    {
+        services.Add(new ServiceDescriptor(typeof(ChromaVectorStore), serviceKey,
+            (sp, _) => storeFactory(sp, GetStoreOptions(sp, optionsProvider)), lifetime));
+
+        services.Add(new ServiceDescriptor(typeof(VectorStore), serviceKey,
+            static (sp, key) => sp.GetRequiredKeyedService<ChromaVectorStore>(key), lifetime));
+
+        return services;
     }
 
     /// <summary>
     /// Registers a <see cref="ChromaCollection{TKey, TRecord}"/> as <see cref="VectorStoreCollection{TKey, TRecord}"/>
-    /// with <see cref="ChromaConfigurationOptions"/> returned by <paramref name="chromaOptionsProvider"/>
-    /// or retrieved from the dependency injection container if <paramref name="chromaOptionsProvider"/> was not provided.
+    /// with <see cref="ChromaClient"/> returned by <paramref name="clientProvider"/>
+    /// or retrieved from the dependency injection container if <paramref name="clientProvider"/> was not provided.
     /// </summary>
-    /// <inheritdoc cref="AddKeyedChromaCollection{TKey, TRecord}(IServiceCollection, object?, string, Func{IServiceProvider, ChromaConfigurationOptions}?, Func{IServiceProvider, ChromaCollectionOptions}?, ServiceLifetime)"/>
+    /// <inheritdoc cref="AddKeyedChromaCollection{TKey, TRecord}(IServiceCollection, object?, string, Func{IServiceProvider, ChromaClient}?, Func{IServiceProvider, ChromaCollectionOptions}?, ServiceLifetime)"/>
     [RequiresUnreferencedCode(DynamicCodeMessage)]
     [RequiresDynamicCode(UnreferencedCodeMessage)]
     public static IServiceCollection AddChromaCollection<TKey, TRecord>(
         this IServiceCollection services,
         string name,
-        Func<IServiceProvider, ChromaConfigurationOptions>? chromaOptionsProvider = default,
+        Func<IServiceProvider, ChromaClient>? clientProvider = default,
         Func<IServiceProvider, ChromaCollectionOptions>? optionsProvider = default,
         ServiceLifetime lifetime = ServiceLifetime.Singleton)
         where TKey : notnull
         where TRecord : class
-        => AddKeyedChromaCollection<TKey, TRecord>(services, serviceKey: null, name, chromaOptionsProvider, optionsProvider, lifetime);
+        => AddKeyedChromaCollection<TKey, TRecord>(services, serviceKey: null, name, clientProvider, optionsProvider, lifetime);
 
     /// <summary>
     /// Registers a keyed <see cref="ChromaCollection{TKey, TRecord}"/> as <see cref="VectorStoreCollection{TKey, TRecord}"/>
-    /// with <see cref="ChromaConfigurationOptions"/> returned by <paramref name="chromaOptionsProvider"/>
-    /// or retrieved from the dependency injection container if <paramref name="chromaOptionsProvider"/> was not provided.
+    /// with <see cref="ChromaClient"/> returned by <paramref name="clientProvider"/>
+    /// or retrieved from the dependency injection container if <paramref name="clientProvider"/> was not provided.
     /// </summary>
     /// <param name="services">The <see cref="IServiceCollection"/> to register the <see cref="ChromaCollection{TKey, TRecord}"/> on.</param>
     /// <param name="serviceKey">The key with which to associate the collection.</param>
     /// <param name="name">The name of the collection.</param>
-    /// <param name="chromaOptionsProvider">The <see cref="ChromaConfigurationOptions"/> provider.</param>
+    /// <param name="clientProvider">The <see cref="ChromaClient"/> provider.</param>
     /// <param name="optionsProvider">Options provider to further configure the <see cref="ChromaCollection{TKey, TRecord}"/>.</param>
     /// <param name="lifetime">The service lifetime for the store. Defaults to <see cref="ServiceLifetime.Singleton"/>.</param>
     /// <returns>Service collection.</returns>
@@ -144,7 +158,7 @@ public static class ChromaServiceCollectionExtensions
         this IServiceCollection services,
         object? serviceKey,
         string name,
-        Func<IServiceProvider, ChromaConfigurationOptions>? chromaOptionsProvider = default,
+        Func<IServiceProvider, ChromaClient>? clientProvider = default,
         Func<IServiceProvider, ChromaCollectionOptions>? optionsProvider = default,
         ServiceLifetime lifetime = ServiceLifetime.Singleton)
         where TKey : notnull
@@ -153,22 +167,13 @@ public static class ChromaServiceCollectionExtensions
         Throw.IfNull(services);
         Throw.IfNullOrWhitespace(name);
 
-        services.Add(new ServiceDescriptor(typeof(ChromaCollection<TKey, TRecord>), serviceKey, (sp, _) =>
+        return AddKeyedChromaCollection<TKey, TRecord>(services, serviceKey, lifetime, (sp, options) =>
         {
-            var chromaOptions = chromaOptionsProvider is null ? sp.GetRequiredService<ChromaConfigurationOptions>() : chromaOptionsProvider(sp);
-            var options = GetCollectionOptions(sp, optionsProvider);
+            var client = clientProvider is null ? sp.GetRequiredService<ChromaClient>() : clientProvider(sp);
 
-            // The collection creates its own HttpClient, so it owns it.
-            return new ChromaCollection<TKey, TRecord>(chromaOptions, new HttpClient(), name, ownsClient: true, options);
-        }, lifetime));
-
-        services.Add(new ServiceDescriptor(typeof(VectorStoreCollection<TKey, TRecord>), serviceKey,
-            static (sp, key) => sp.GetRequiredKeyedService<ChromaCollection<TKey, TRecord>>(key), lifetime));
-
-        services.Add(new ServiceDescriptor(typeof(IVectorSearchable<TRecord>), serviceKey,
-            static (sp, key) => sp.GetRequiredKeyedService<ChromaCollection<TKey, TRecord>>(key), lifetime));
-
-        return services;
+            // The client was restored from the DI container, so we do not own it.
+            return new ChromaCollection<TKey, TRecord>(client, name, options);
+        }, optionsProvider);
     }
 
     /// <summary>
@@ -211,9 +216,37 @@ public static class ChromaServiceCollectionExtensions
         where TKey : notnull
         where TRecord : class
     {
+        Throw.IfNull(services);
+        Throw.IfNullOrWhitespace(name);
         Throw.IfNullOrWhitespace(uri);
 
-        return AddKeyedChromaCollection<TKey, TRecord>(services, serviceKey, name, _ => new ChromaConfigurationOptions(uri), sp => options!, lifetime);
+        // The collection creates its own HttpClient, so it owns it.
+        return AddKeyedChromaCollection<TKey, TRecord>(services, serviceKey, lifetime,
+            (_, collectionOptions) => new ChromaCollection<TKey, TRecord>(new ChromaConfigurationOptions(uri), new HttpClient(), name, ownsClient: true, collectionOptions),
+            _ => options!);
+    }
+
+    [RequiresUnreferencedCode(DynamicCodeMessage)]
+    [RequiresDynamicCode(UnreferencedCodeMessage)]
+    private static IServiceCollection AddKeyedChromaCollection<TKey, TRecord>(
+        IServiceCollection services,
+        object? serviceKey,
+        ServiceLifetime lifetime,
+        Func<IServiceProvider, ChromaCollectionOptions?, ChromaCollection<TKey, TRecord>> collectionFactory,
+        Func<IServiceProvider, ChromaCollectionOptions?>? optionsProvider)
+        where TKey : notnull
+        where TRecord : class
+    {
+        services.Add(new ServiceDescriptor(typeof(ChromaCollection<TKey, TRecord>), serviceKey,
+            (sp, _) => collectionFactory(sp, GetCollectionOptions(sp, optionsProvider)), lifetime));
+
+        services.Add(new ServiceDescriptor(typeof(VectorStoreCollection<TKey, TRecord>), serviceKey,
+            static (sp, key) => sp.GetRequiredKeyedService<ChromaCollection<TKey, TRecord>>(key), lifetime));
+
+        services.Add(new ServiceDescriptor(typeof(IVectorSearchable<TRecord>), serviceKey,
+            static (sp, key) => sp.GetRequiredKeyedService<ChromaCollection<TKey, TRecord>>(key), lifetime));
+
+        return services;
     }
 
     private static ChromaVectorStoreOptions? GetStoreOptions(IServiceProvider sp, Func<IServiceProvider, ChromaVectorStoreOptions?>? optionsProvider)

@@ -1,6 +1,7 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using ChromaDB.Client;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.VectorData;
@@ -24,14 +25,14 @@ public class ChromaEmbeddingGenerationTests(ChromaEmbeddingGenerationTests.Strin
         public override Func<IServiceCollection, IServiceCollection>[] DependencyInjectionStoreRegistrationDelegates =>
         [
             services => services
-                .AddSingleton(ChromaTestStore.Instance.ChromaOptions)
+                .AddSingleton(new ChromaClient(ChromaTestStore.Instance.ChromaOptions, ChromaTestStore.Instance.HttpClient))
                 .AddChromaVectorStore()
         ];
 
         public override Func<IServiceCollection, IServiceCollection>[] DependencyInjectionCollectionRegistrationDelegates =>
         [
             services => services
-                .AddSingleton(ChromaTestStore.Instance.ChromaOptions)
+                .AddSingleton(new ChromaClient(ChromaTestStore.Instance.ChromaOptions, ChromaTestStore.Instance.HttpClient))
                 .AddChromaCollection<Guid, RecordWithAttributes>(this.CollectionName)
         ];
     }
@@ -46,14 +47,14 @@ public class ChromaEmbeddingGenerationTests(ChromaEmbeddingGenerationTests.Strin
         public override Func<IServiceCollection, IServiceCollection>[] DependencyInjectionStoreRegistrationDelegates =>
         [
             services => services
-                .AddSingleton(ChromaTestStore.Instance.ChromaOptions)
+                .AddSingleton(new ChromaClient(ChromaTestStore.Instance.ChromaOptions, ChromaTestStore.Instance.HttpClient))
                 .AddChromaVectorStore()
         ];
 
         public override Func<IServiceCollection, IServiceCollection>[] DependencyInjectionCollectionRegistrationDelegates =>
         [
             services => services
-                .AddSingleton(ChromaTestStore.Instance.ChromaOptions)
+                .AddSingleton(new ChromaClient(ChromaTestStore.Instance.ChromaOptions, ChromaTestStore.Instance.HttpClient))
                 .AddChromaCollection<Guid, RecordWithAttributes>(this.CollectionName)
         ];
     }

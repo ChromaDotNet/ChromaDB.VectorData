@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <PackageReference Include="Testcontainers" />
+    <PackageReference Include="ChromaDotNet.Client.DependencyInjection" />
   </ItemGroup>
   
   <ItemGroup>

@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using ChromaDB.Client;
+using ChromaDB.Client.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using VectorData.ConformanceTests;
@@ -23,16 +24,21 @@ public class ChromaDependencyInjectionTests
     private static string UriProvider(IServiceProvider sp, object? serviceKey = null)
         => sp.GetRequiredService<IConfiguration>().GetRequiredSection(CreateConfigKey("Chroma", serviceKey, "Uri")).Value!;
 
+    // The ChromaClient of ChromaDotNet.Client.DependencyInjection, a singleton with an HttpClient from IHttpClientFactory.
+    private static IServiceCollection AddClient(IServiceCollection services)
+    {
+        services.AddChromaClient(_ => new ChromaConfigurationOptions(Uri));
+        return services;
+    }
+
     public override IEnumerable<Func<IServiceCollection, object?, string, ServiceLifetime, IServiceCollection>> CollectionDelegates
     {
         get
         {
             yield return (services, serviceKey, name, lifetime) => serviceKey is null
-                ? services
-                    .AddSingleton(new ChromaConfigurationOptions(Uri))
+                ? AddClient(services)
                     .AddChromaCollection<string, Record>(name, lifetime: lifetime)
-                : services
-                    .AddSingleton(new ChromaConfigurationOptions(Uri))
+                : AddClient(services)
                     .AddKeyedChromaCollection<string, Record>(serviceKey, name, lifetime: lifetime);
 
             yield return (services, serviceKey, name, lifetime) => serviceKey is null
@@ -41,9 +47,9 @@ public class ChromaDependencyInjectionTests
 
             yield return (services, serviceKey, name, lifetime) => serviceKey is null
                 ? services.AddChromaCollection<string, Record>(
-                    name, sp => new ChromaConfigurationOptions(UriProvider(sp)), lifetime: lifetime)
+                    name, sp => new ChromaClient(new ChromaConfigurationOptions(UriProvider(sp)), new HttpClient()), lifetime: lifetime)
                 : services.AddKeyedChromaCollection<string, Record>(
-                    serviceKey, name, sp => new ChromaConfigurationOptions(UriProvider(sp, serviceKey)), lifetime: lifetime);
+                    serviceKey, name, sp => new ChromaClient(new ChromaConfigurationOptions(UriProvider(sp, serviceKey)), new HttpClient()), lifetime: lifetime);
         }
     }
 
@@ -56,12 +62,16 @@ public class ChromaDependencyInjectionTests
                 : services.AddKeyedChromaVectorStore(serviceKey, Uri, lifetime: lifetime);
 
             yield return (services, serviceKey, lifetime) => serviceKey is null
-                ? services
-                    .AddSingleton(new ChromaConfigurationOptions(Uri))
+                ? AddClient(services)
                     .AddChromaVectorStore(lifetime: lifetime)
-                : services
-                    .AddSingleton(new ChromaConfigurationOptions(Uri))
+                : AddClient(services)
                     .AddKeyedChromaVectorStore(serviceKey, lifetime: lifetime);
+
+            yield return (services, serviceKey, lifetime) => serviceKey is null
+                ? services.AddChromaVectorStore(
+                    sp => new ChromaClient(new ChromaConfigurationOptions(UriProvider(sp)), new HttpClient()), lifetime: lifetime)
+                : services.AddKeyedChromaVectorStore(
+                    serviceKey, sp => new ChromaClient(new ChromaConfigurationOptions(UriProvider(sp, serviceKey)), new HttpClient()), lifetime: lifetime);
         }
     }
 
