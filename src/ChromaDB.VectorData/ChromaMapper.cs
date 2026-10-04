@@ -1,165 +1,106 @@
-﻿// Licensed to the .NET Foundation under one or more agreements.
+// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Diagnostics;
-using Google.Protobuf.Collections;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.VectorData.ProviderServices;
-using Qdrant.Client.Grpc;
 
 namespace ChromaDB.VectorData;
 
 /// <summary>
-/// Mapper between a Qdrant record and the consumer data model that uses json as an intermediary to allow supporting a wide range of models.
+/// A record as Chroma stores it: an id, an embedding and metadata.
+/// </summary>
+internal readonly record struct ChromaStorageRecord(string Id, ReadOnlyMemory<float> Embedding, Dictionary<string, object>? Metadata);
+
+/// <summary>
+/// Mapper between a Chroma record and the consumer data model.
 /// </summary>
 /// <typeparam name="TRecord">The consumer data model to map to or from.</typeparam>
-internal sealed class ChromaMapper<TRecord>(CollectionModel model, bool hasNamedVectors)
+internal sealed class ChromaMapper<TRecord>(CollectionModel model)
     where TRecord : class
 {
-    /// <inheritdoc />
-    public PointStruct MapFromDataToStorageModel(TRecord dataModel, int recordIndex, GeneratedEmbeddings<Embedding<float>>?[]? generatedEmbeddings)
+    /// <summary>
+    /// Convert the given key to a Chroma record id.
+    /// </summary>
+    public static string ToId(object key)
+        => key switch
+        {
+            string id => id,
+            Guid id => id.ToString("D"),
+            _ => throw new NotSupportedException($"The provided key type '{key.GetType().Name}' is not supported by Chroma.")
+        };
+
+    public ChromaStorageRecord MapFromDataToStorageModel(TRecord dataModel, int recordIndex, GeneratedEmbeddings<Embedding<float>>?[]? generatedEmbeddings)
     {
         var keyProperty = model.KeyProperty;
+        var key = keyProperty.GetValueAsObject(dataModel)
+            ?? throw new InvalidOperationException($"Missing key property '{keyProperty.ModelName}' on provided record of type '{typeof(TRecord).Name}'.");
 
-        var pointId = keyProperty.Type switch
-        {
-            var t when t == typeof(ulong) => new PointId
-            {
-                Num = (ulong?)keyProperty.GetValueAsObject(dataModel!) ?? throw new InvalidOperationException($"Missing key property '{keyProperty.ModelName}' on provided record of type '{typeof(TRecord).Name}'.")
-            },
-
-            var t when t == typeof(Guid) => new PointId
-            {
-                Uuid = ((Guid?)keyProperty.GetValueAsObject(dataModel!))?.ToString("D") ?? throw new InvalidOperationException($"Missing key property '{keyProperty.ModelName}' on provided record of type '{typeof(TRecord).Name}'.")
-            },
-            _ => throw new InvalidOperationException($"Unsupported key type '{keyProperty.Type.Name}' for key property '{keyProperty.ModelName}' on provided record of type '{typeof(TRecord).Name}'.")
-        };
-
-        // Create point.
-        var pointStruct = new PointStruct
-        {
-            Id = pointId,
-            Vectors = new Vectors(),
-            Payload = { },
-        };
-
-        // Add point payload.
+        // Chroma metadata has no null values: a property without a value is not stored.
+        Dictionary<string, object>? metadata = null;
         foreach (var property in model.DataProperties)
         {
-            var propertyValue = property.GetValueAsObject(dataModel!);
-            pointStruct.Payload.Add(property.StorageName, ChromaFieldMapping.ConvertToGrpcFieldValue(propertyValue));
-        }
-
-        // Add vectors.
-        if (hasNamedVectors)
-        {
-            var namedVectors = new NamedVectors();
-
-            for (var i = 0; i < model.VectorProperties.Count; i++)
+            if (ChromaFieldMapping.ToMetadataValue(property.GetValueAsObject(dataModel)) is { } value)
             {
-                var property = model.VectorProperties[i];
-
-                namedVectors.Vectors.Add(
-                    property.StorageName,
-                    GetVector(
-                        property,
-                        generatedEmbeddings?[i] is GeneratedEmbeddings<Embedding<float>> e
-                            ? e[recordIndex]
-                            : property.GetValueAsObject(dataModel!)));
+                (metadata ??= []).Add(property.StorageName, value);
             }
-
-            pointStruct.Vectors.Vectors_ = namedVectors;
-        }
-        else
-        {
-            // We already verified in the constructor via FindProperties that there is exactly one vector property when not using named vectors.
-            Debug.Assert(
-                generatedEmbeddings is null || generatedEmbeddings.Length == 1 && generatedEmbeddings[0] is not null,
-                "There should be exactly one generated embedding when not using named vectors (single vector property).");
-            pointStruct.Vectors.Vector = GetVector(
-                model.VectorProperty,
-                generatedEmbeddings is null
-                    ? model.VectorProperty.GetValueAsObject(dataModel!)
-                    : generatedEmbeddings[0]![recordIndex]);
         }
 
-        return pointStruct;
+        // There is exactly one vector property, as verified by the model builder.
+        Debug.Assert(
+            generatedEmbeddings is null || generatedEmbeddings.Length == 1 && generatedEmbeddings[0] is not null,
+            "There should be exactly one generated embedding, for the single vector property.");
+        var embedding = GetVector(
+            model.VectorProperty,
+            generatedEmbeddings is null
+                ? model.VectorProperty.GetValueAsObject(dataModel)
+                : generatedEmbeddings[0]![recordIndex]);
 
-        Vector GetVector(PropertyModel property, object? embedding)
+        return new ChromaStorageRecord(ToId(key), embedding, metadata);
+
+        static ReadOnlyMemory<float> GetVector(PropertyModel property, object? embedding)
             => embedding switch
             {
-                ReadOnlyMemory<float> m => m.ToArray(),
-                Embedding<float> e => e.Vector.ToArray(),
+                ReadOnlyMemory<float> m => m,
+                Embedding<float> e => e.Vector,
                 float[] a => a,
 
-                null => throw new InvalidOperationException($"Vector property '{property.ModelName}' on provided record of type '{typeof(TRecord).Name}' may not be null when not using named vectors."),
+                null => throw new InvalidOperationException($"Vector property '{property.ModelName}' on provided record of type '{typeof(TRecord).Name}' may not be null."),
                 var unknownEmbedding => throw new InvalidOperationException($"Vector property '{property.ModelName}' on provided record of type '{typeof(TRecord).Name}' has unsupported embedding type '{unknownEmbedding.GetType().Name}'.")
             };
     }
 
-    /// <inheritdoc />
-    public TRecord MapFromStorageToDataModel(PointId pointId, MapField<string, Value> payload, VectorsOutput vectorsOutput, bool includeVectors)
+    public TRecord MapFromStorageToDataModel(string id, ReadOnlyMemory<float>? embedding, Dictionary<string, object>? metadata, bool includeVectors)
     {
         var outputRecord = model.CreateRecord<TRecord>()!;
 
-        // TODO: Set the following generically to avoid boxing
-        model.KeyProperty.SetValueAsObject(outputRecord, pointId switch
+        model.KeyProperty.SetValueAsObject(
+            outputRecord,
+            (Nullable.GetUnderlyingType(model.KeyProperty.Type) ?? model.KeyProperty.Type) == typeof(Guid) ? Guid.Parse(id) : id);
+
+        if (includeVectors && embedding is { } vector)
         {
-            { HasNum: true } => pointId.Num,
-            { HasUuid: true } => Guid.Parse(pointId.Uuid),
-            _ => throw new UnreachableException()
-        });
-
-        // Set each vector property if embeddings are included in the point.
-        if (includeVectors)
-        {
-            if (hasNamedVectors)
-            {
-                var storageVectors = vectorsOutput.Vectors.Vectors;
-
-                foreach (var vectorProperty in model.VectorProperties)
+            var property = model.VectorProperty;
+            property.SetValueAsObject(
+                outputRecord,
+                (Nullable.GetUnderlyingType(property.Type) ?? property.Type) switch
                 {
-                    PopulateVectorProperty(outputRecord, storageVectors[vectorProperty.StorageName], vectorProperty);
-                }
-            }
-            else
-            {
-                PopulateVectorProperty(outputRecord, vectorsOutput.Vector, model.VectorProperty);
-            }
+                    var t when t == typeof(ReadOnlyMemory<float>) => vector,
+                    var t when t == typeof(Embedding<float>) => new Embedding<float>(vector),
+                    var t when t == typeof(float[]) => vector.ToArray(),
 
-            static void PopulateVectorProperty(TRecord record, VectorOutput value, VectorPropertyModel property)
-            {
-                RepeatedField<float> data = value switch
-                {
-                    // qdrant 1.16 and newer, return the new union type
-                    { Dense: not null } => value.Dense.Data,
-                    // Required for qdrant < 1.16.0, but deprecated in client >=1.16.0 and is empty with qdrant server 1.17.0
-#pragma warning disable CS0612 // Type or member is obsolete
-                    { Data: not null } => value.Data,
-#pragma warning restore CS0612
                     _ => throw new UnreachableException()
-
-                };
-                property.SetValueAsObject(
-                    record,
-                    (Nullable.GetUnderlyingType(property.Type) ?? property.Type) switch
-                    {
-                        var t when t == typeof(ReadOnlyMemory<float>) => new ReadOnlyMemory<float>(data.ToArray()),
-                        var t when t == typeof(Embedding<float>) => new Embedding<float>(data.ToArray()),
-                        var t when t == typeof(float[]) => data.ToArray(),
-
-                        _ => throw new UnreachableException()
-                    });
-            }
+                });
         }
 
-        foreach (var dataProperty in model.DataProperties)
+        if (metadata is not null)
         {
-            if (payload.TryGetValue(dataProperty.StorageName, out var fieldValue))
+            foreach (var dataProperty in model.DataProperties)
             {
-                dataProperty.SetValueAsObject(
-                    outputRecord,
-                    ChromaFieldMapping.Deserialize(fieldValue, dataProperty.Type));
+                if (metadata.TryGetValue(dataProperty.StorageName, out var value))
+                {
+                    dataProperty.SetValueAsObject(outputRecord, ChromaFieldMapping.FromMetadataValue(value, dataProperty.Type));
+                }
             }
         }
 
