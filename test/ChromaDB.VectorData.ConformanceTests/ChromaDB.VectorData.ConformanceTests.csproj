@@ -10,7 +10,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Testcontainers" />
+    <PackageReference Include="ChromaDotNet.Testcontainers" />
     <PackageReference Include="ChromaDotNet.Client.DependencyInjection" />
   </ItemGroup>
   

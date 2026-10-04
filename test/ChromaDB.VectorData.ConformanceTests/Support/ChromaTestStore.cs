@@ -2,9 +2,8 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using ChromaDB.Client;
-using DotNet.Testcontainers.Builders;
-using DotNet.Testcontainers.Containers;
 using Microsoft.Extensions.VectorData;
+using Testcontainers.Chroma;
 using VectorData.ConformanceTests.Support;
 
 namespace ChromaDB.VectorData.ConformanceTests.Support;
@@ -13,18 +12,13 @@ namespace ChromaDB.VectorData.ConformanceTests.Support;
 
 internal sealed class ChromaTestStore : TestStore
 {
-    private const ushort ChromaPort = 8000;
-
     public static ChromaTestStore Instance { get; } = new();
 
     // Chroma indexes vectors with HNSW only
     public override string DefaultIndexKind => IndexKind.Hnsw;
 
     // CHROMA_IMAGE runs the tests against another Chroma release, e.g. chromadb/chroma:1.5.0.
-    private readonly IContainer _container = new ContainerBuilder(Environment.GetEnvironmentVariable("CHROMA_IMAGE") ?? "chromadb/chroma:1.5.9")
-        .WithPortBinding(ChromaPort, assignRandomHostPort: true)
-        .WithWaitStrategy(Wait.ForUnixContainer().UntilHttpRequestIsSucceeded(request => request.ForPath("/api/v2/heartbeat").ForPort(ChromaPort)))
-        .Build();
+    private readonly ChromaContainer _container = new ChromaBuilder(Environment.GetEnvironmentVariable("CHROMA_IMAGE") ?? "chromadb/chroma:1.5.9").Build();
 
     private HttpClient? _httpClient;
 
@@ -55,7 +49,7 @@ internal sealed class ChromaTestStore : TestStore
     protected override async Task StartAsync()
     {
         await this._container.StartAsync();
-        this.ChromaOptions = new ChromaConfigurationOptions($"http://{this._container.Hostname}:{this._container.GetMappedPublicPort(ChromaPort)}");
+        this.ChromaOptions = new ChromaConfigurationOptions(this._container.GetConnectionString());
         this._httpClient = new HttpClient();
         // The vector store does not own a ChromaClient it is given; GetVectorStore covers the constructor with options.
         this.DefaultVectorStore = new ChromaVectorStore(new ChromaClient(this.ChromaOptions, this._httpClient));
