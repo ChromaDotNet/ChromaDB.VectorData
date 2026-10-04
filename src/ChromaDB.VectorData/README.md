@@ -73,5 +73,6 @@ services.AddChromaVectorStore("http://localhost:8000");
 - `GetAsync` with a filter does not support ordering.
 - Filtering on whether an array property contains a value is not supported yet, and comparisons work on numbers only.
 - Hybrid search is not supported.
+- ChromaDotNet.Client reads metadata strings that look like dates as dates: a string property that holds an ISO 8601 date comes back in the round-trip format (`2026-10-04` becomes `2026-10-04T00:00:00.0000000`), and a `DateTimeOffset` comes back as the same instant with the local offset.
 
 The provider runs the Microsoft.Extensions.VectorData conformance tests against Chroma 1.5.9.
