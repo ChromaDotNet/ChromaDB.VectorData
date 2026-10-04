@@ -113,47 +113,35 @@ internal static class ChromaFieldMapping
 
     private static object FromArray(JsonElement array, Type targetType)
     {
-        Type elementType;
-        bool isList;
+        var values = array.EnumerateArray().Select(FromJsonScalar);
 
-        if (targetType.IsArray)
+        return targetType switch
         {
-            elementType = targetType.GetElementType()!;
-            isList = false;
-        }
-        else if (targetType.IsGenericType && targetType.GetGenericTypeDefinition() == typeof(List<>))
-        {
-            elementType = targetType.GenericTypeArguments[0];
-            isList = true;
-        }
-        else
-        {
-            throw new InvalidOperationException($"Cannot read a metadata array into a property of type {targetType.Name}.");
-        }
+            Type t when t == typeof(List<string>) => Convert<string>(values).ToList(),
+            Type t when t == typeof(string[]) => Convert<string>(values).ToArray(),
+            Type t when t == typeof(List<int>) => Convert<int>(values).ToList(),
+            Type t when t == typeof(int[]) => Convert<int>(values).ToArray(),
+            Type t when t == typeof(List<long>) => Convert<long>(values).ToList(),
+            Type t when t == typeof(long[]) => Convert<long>(values).ToArray(),
+            Type t when t == typeof(List<double>) => Convert<double>(values).ToList(),
+            Type t when t == typeof(double[]) => Convert<double>(values).ToArray(),
+            Type t when t == typeof(List<float>) => Convert<float>(values).ToList(),
+            Type t when t == typeof(float[]) => Convert<float>(values).ToArray(),
+            Type t when t == typeof(List<bool>) => Convert<bool>(values).ToList(),
+            Type t when t == typeof(bool[]) => Convert<bool>(values).ToArray(),
+            Type t when t == typeof(List<DateTime>) => Convert<DateTime>(values).ToList(),
+            Type t when t == typeof(DateTime[]) => Convert<DateTime>(values).ToArray(),
+            Type t when t == typeof(List<DateTimeOffset>) => Convert<DateTimeOffset>(values).ToList(),
+            Type t when t == typeof(DateTimeOffset[]) => Convert<DateTimeOffset>(values).ToArray(),
+#if NET
+            Type t when t == typeof(List<DateOnly>) => Convert<DateOnly>(values).ToList(),
+            Type t when t == typeof(DateOnly[]) => Convert<DateOnly>(values).ToArray(),
+#endif
 
-        var length = array.GetArrayLength();
-        IList result = isList
-            ? (IList)Activator.CreateInstance(targetType, length)!
-            : Array.CreateInstance(elementType, length);
+            _ => throw new UnreachableException($"Unsupported collection type {targetType.Name}"),
+        };
 
-        var index = 0;
-        foreach (var item in array.EnumerateArray())
-        {
-            var value = FromScalar(FromJsonScalar(item), elementType);
-
-            if (isList)
-            {
-                result.Add(value);
-            }
-            else
-            {
-                result[index] = value;
-            }
-
-            index++;
-        }
-
-        Debug.Assert(index == length, "The array length does not match the number of elements.");
-        return result;
+        static IEnumerable<T> Convert<T>(IEnumerable<object> values)
+            => values.Select(value => (T)FromScalar(value, typeof(T)));
     }
 }
