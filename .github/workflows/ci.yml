@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
     branches: [main]
 
@@ -78,3 +79,73 @@ jobs:
 
       - name: Test
         run: dotnet test test/ChromaDB.VectorData.ConformanceTests
+
+  # Every run packs the provider; only a version tag publishes it, with the version set in the project file.
+  package:
+    name: Package
+    needs: [unit-tests, conformance-tests]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ hashFiles('Directory.Packages.props') }}
+          restore-keys: nuget-
+
+      - name: Pack
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            dotnet pack src/ChromaDB.VectorData -c Release -o nuget -p:CI=true
+            version="${GITHUB_REF_NAME#v}"
+            if [[ ! -f "nuget/ChromaDotNet.VectorData.$version.nupkg" ]]; then
+              echo "The tag $GITHUB_REF_NAME does not match the version in the project file:" >&2
+              ls nuget >&2
+              exit 1
+            fi
+          else
+            dotnet pack src/ChromaDB.VectorData -c Release -o nuget -p:CI=true --version-suffix "ci.$GITHUB_RUN_NUMBER"
+          fi
+
+      - name: Upload
+        uses: actions/upload-artifact@v6
+        with:
+          name: nuget-packages
+          if-no-files-found: error
+          path: nuget/*.nupkg
+
+  # NuGet trusted publishing: the NUGET_USER variable names the nuget.org account with a trusted publishing policy
+  # for this repository, this workflow and the nuget environment.
+  publish:
+    name: Publish
+    if: startsWith(github.ref, 'refs/tags/v') && vars.NUGET_USER != ''
+    needs: package
+    runs-on: ubuntu-latest
+    environment: nuget
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Download
+        uses: actions/download-artifact@v7
+        with:
+          name: nuget-packages
+
+      - name: NuGet login
+        id: login
+        uses: NuGet/login@v1
+        with:
+          user: ${{ vars.NUGET_USER }}
+
+      - name: Publish to NuGet.org
+        run: >
+          dotnet nuget push ./*.nupkg
+          --source "https://api.nuget.org/v3/index.json"
+          --api-key ${{ steps.login.outputs.NUGET_API_KEY }}
