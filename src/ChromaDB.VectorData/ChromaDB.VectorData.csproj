@@ -24,6 +24,11 @@
     <PackageReference Include="System.Text.Json" />
   </ItemGroup>
 
+  <ItemGroup Condition=" '$(TargetFramework)' == 'net462' ">
+    <Reference Include="System.Net.Http" />
+    <Using Include="System.Net.Http" />
+  </ItemGroup>
+
   <ItemGroup>
     <InternalsVisibleTo Include="ChromaDB.VectorData.UnitTests" />
     <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
