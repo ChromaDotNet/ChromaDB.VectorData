@@ -11,9 +11,21 @@ namespace ChromaDB.VectorData.ConformanceTests.TypeTests;
 public class ChromaDataTypeTests(ChromaDataTypeTests.Fixture fixture)
     : DataTypeTests<Guid, DataTypeTests<Guid>.DefaultRecord>(fixture), IClassFixture<ChromaDataTypeTests.Fixture>
 {
+    // Chroma does not compare an array field with an array
+    [Fact]
+    public override Task String_array()
+        => this.Test<string[]>(
+            "StringArray",
+            ["foo", "bar"],
+            ["foo", "baz"],
+            isFilterable: false);
+
     public new class Fixture : DataTypeTests<Guid, DataTypeTests<Guid>.DefaultRecord>.Fixture
     {
         public override TestStore TestStore => ChromaTestStore.Instance;
+
+        // Chroma metadata has no null values, and Chroma has no filter for a missing field
+        public override bool IsNullFilteringSupported => false;
 
         public override Type[] UnsupportedDefaultTypes { get; } =
         [

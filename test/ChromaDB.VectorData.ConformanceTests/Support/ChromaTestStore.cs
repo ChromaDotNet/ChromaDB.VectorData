@@ -27,6 +27,13 @@ internal sealed class ChromaTestStore : TestStore
 
     private HttpClient? _httpClient;
 
+    /// <summary>
+    /// Chroma normalizes the vectors of cosine collections, so the vectors it returns
+    /// can differ from the upserted ones in the last digits; we can only check that
+    /// a vector was returned.
+    /// </summary>
+    public override bool VectorsComparable => false;
+
     public ChromaConfigurationOptions ChromaOptions { get; private set; } = null!;
 
     public HttpClient HttpClient => this._httpClient ?? throw new InvalidOperationException("Not initialized");

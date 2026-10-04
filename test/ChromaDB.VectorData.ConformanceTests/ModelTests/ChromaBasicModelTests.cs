@@ -17,6 +17,12 @@ public class ChromaBasicModelTests(ChromaBasicModelTests.Fixture fixture)
         Assert.Equal("Chroma does not support ordering.", exception.Message);
     }
 
+    public override async Task GetAsync_with_filter_and_OrderBy_and_Skip()
+    {
+        var exception = await Assert.ThrowsAsync<NotSupportedException>(base.GetAsync_with_filter_and_OrderBy_and_Skip);
+        Assert.Equal("Chroma does not support ordering.", exception.Message);
+    }
+
     public override async Task GetAsync_with_filter_and_multiple_OrderBys()
     {
         var exception = await Assert.ThrowsAsync<NotSupportedException>(base.GetAsync_with_filter_and_multiple_OrderBys);
