@@ -29,9 +29,10 @@ internal class MockableChromaClient : IDisposable
         Throw.IfNull(options);
         Throw.IfNull(httpClient);
 
-        _options = options;
+        // Strings in metadata stay strings, and lists come back as lists of values, not as JSON.
+        _options = options.WithMetadataValues(ChromaMetadataValues.Exact);
         _httpClient = httpClient;
-        _chromaClient = new ChromaClient(options, httpClient);
+        _chromaClient = new ChromaClient(_options, httpClient);
         _ownsClient = ownsClient;
     }
 

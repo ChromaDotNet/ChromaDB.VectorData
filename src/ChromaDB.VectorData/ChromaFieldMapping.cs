@@ -4,7 +4,6 @@
 using System.Collections;
 using System.Diagnostics;
 using System.Globalization;
-using System.Text.Json;
 
 namespace ChromaDB.VectorData;
 
@@ -62,8 +61,7 @@ internal static class ChromaFieldMapping
         return metadataValue switch
         {
             null => null,
-            JsonElement { ValueKind: JsonValueKind.Array } array => FromArray(array, targetType),
-            JsonElement element => FromScalar(FromJsonScalar(element), targetType),
+            IList list => FromList(list, targetType),
             _ => FromScalar(metadataValue, targetType),
         };
     }
@@ -77,14 +75,6 @@ internal static class ChromaFieldMapping
 #if NET
             (string s, var t) when t == typeof(DateOnly) => DateOnly.Parse(s, CultureInfo.InvariantCulture),
 #endif
-
-            // ChromaDotNet.Client reads metadata strings that look like dates as DateTime.
-            (DateTime d, var t) when t == typeof(DateTime) => d,
-            (DateTime d, var t) when t == typeof(DateTimeOffset) => new DateTimeOffset(d),
-#if NET
-            (DateTime d, var t) when t == typeof(DateOnly) => DateOnly.FromDateTime(d),
-#endif
-            (DateTime d, var t) when t == typeof(string) => d.ToString("O", CultureInfo.InvariantCulture),
 
             (bool b, _) => b,
 
@@ -100,20 +90,9 @@ internal static class ChromaFieldMapping
             _ => throw new InvalidOperationException($"Cannot read the metadata value of type {value.GetType().Name} into a property of type {targetType.Name}.")
         };
 
-    private static object FromJsonScalar(JsonElement element)
-        => element.ValueKind switch
-        {
-            JsonValueKind.String => element.GetString()!,
-            JsonValueKind.True => true,
-            JsonValueKind.False => false,
-            JsonValueKind.Number when element.TryGetInt64(out var l) => l,
-            JsonValueKind.Number => element.GetDouble(),
-            _ => throw new InvalidOperationException($"Unsupported metadata value kind {element.ValueKind}.")
-        };
-
-    private static object FromArray(JsonElement array, Type targetType)
+    private static object FromList(IList list, Type targetType)
     {
-        var values = array.EnumerateArray().Select(FromJsonScalar);
+        var values = list.Cast<object>();
 
         return targetType switch
         {

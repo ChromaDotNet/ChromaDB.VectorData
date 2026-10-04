@@ -3,8 +3,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Globalization;
-using System.Text.Json;
 using Xunit;
 
 namespace ChromaDB.VectorData.UnitTests;
@@ -54,26 +52,23 @@ public class ChromaFieldMappingTests
     {
         var expected = new DateTimeOffset(2026, 10, 4, 12, 30, 0, TimeSpan.FromHours(2));
 
-        Assert.Equal(expected, ChromaFieldMapping.FromMetadataValue("2026-10-04T12:30:00.0000000+02:00", typeof(DateTimeOffset)));
+        var actual = (DateTimeOffset)ChromaFieldMapping.FromMetadataValue("2026-10-04T12:30:00.0000000+02:00", typeof(DateTimeOffset))!;
+
+        Assert.Equal(expected, actual);
+        Assert.Equal(expected.Offset, actual.Offset);
     }
 
     [Fact]
-    public void FromMetadataValueReadsADateTimeIntoAString()
-    {
-        // ChromaDotNet.Client reads metadata strings that look like dates as DateTime.
-        var dateTime = new DateTime(2026, 10, 4, 12, 30, 0, DateTimeKind.Utc);
-
-        Assert.Equal(dateTime.ToString("O", CultureInfo.InvariantCulture), ChromaFieldMapping.FromMetadataValue(dateTime, typeof(string)));
-    }
+    public void FromMetadataValueKeepsAStringThatLooksLikeADate()
+        => Assert.Equal("2026-10-04", ChromaFieldMapping.FromMetadataValue("2026-10-04", typeof(string)));
 
     [Fact]
     public void FromMetadataValueReadsArrays()
     {
-        using var strings = JsonDocument.Parse("""["a","b"]""");
-        using var ints = JsonDocument.Parse("[1,2]");
-
-        Assert.Equal(new List<string> { "a", "b" }, ChromaFieldMapping.FromMetadataValue(strings.RootElement, typeof(List<string>)));
-        Assert.Equal(new[] { 1, 2 }, ChromaFieldMapping.FromMetadataValue(ints.RootElement, typeof(int[])));
+        // ChromaDotNet.Client reads a list in metadata as a List<object> of string, long, double and bool.
+        Assert.Equal(new List<string> { "a", "b" }, ChromaFieldMapping.FromMetadataValue(new List<object> { "a", "b" }, typeof(List<string>)));
+        Assert.Equal(new[] { 1, 2 }, ChromaFieldMapping.FromMetadataValue(new List<object> { 1L, 2L }, typeof(int[])));
+        Assert.Equal(new[] { 1.5, 2 }, ChromaFieldMapping.FromMetadataValue(new List<object> { 1.5, 2L }, typeof(double[])));
     }
 
     [Fact]
