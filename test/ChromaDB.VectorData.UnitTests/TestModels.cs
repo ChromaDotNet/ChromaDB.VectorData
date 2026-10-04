@@ -40,6 +40,21 @@ public sealed class DotProductHotel
     public ReadOnlyMemory<float>? Embedding { get; set; }
 }
 
+public sealed class TwoFullTextHotel
+{
+    [VectorStoreKey]
+    public string HotelId { get; set; } = default!;
+
+    [VectorStoreData(IsFullTextIndexed = true)]
+    public string? Description { get; set; }
+
+    [VectorStoreData(IsFullTextIndexed = true)]
+    public string? Review { get; set; }
+
+    [VectorStoreVector(4)]
+    public ReadOnlyMemory<float>? Embedding { get; set; }
+}
+
 public sealed class FullTextHotel
 {
     [VectorStoreKey]
@@ -47,6 +62,9 @@ public sealed class FullTextHotel
 
     [VectorStoreData(IsFullTextIndexed = true)]
     public string? Description { get; set; }
+
+    [VectorStoreData]
+    public int Rating { get; set; }
 
     [VectorStoreVector(4)]
     public ReadOnlyMemory<float>? Embedding { get; set; }

@@ -64,6 +64,46 @@ public class ChromaMapperTests
     }
 
     [Fact]
+    public void WritesTheFullTextPropertyAsTheDocumentAndInTheMetadata()
+    {
+        // Arrange.
+        var sut = new ChromaMapper<FullTextHotel>(new ChromaModelBuilder().Build(typeof(FullTextHotel), typeof(string), definition: null, defaultEmbeddingGenerator: null));
+        var hotel = new FullTextHotel { HotelId = "h1", Description = "A pool and a spa", Embedding = new float[] { 1, 2, 3, 4 } };
+
+        // Act.
+        var record = sut.MapFromDataToStorageModel(hotel, 0, generatedEmbeddings: null);
+
+        // Assert.
+        Assert.Equal("A pool and a spa", record.Document);
+        Assert.Equal("A pool and a spa", record.Metadata!["Description"]);
+    }
+
+    [Fact]
+    public void ReadsTheFullTextPropertyFromTheDocumentWhenTheMetadataLacksIt()
+    {
+        // Arrange: a record written by another Chroma client, with its text in the document only.
+        var sut = new ChromaMapper<FullTextHotel>(new ChromaModelBuilder().Build(typeof(FullTextHotel), typeof(string), definition: null, defaultEmbeddingGenerator: null));
+
+        // Act.
+        var hotel = sut.MapFromStorageToDataModel("h1", embedding: null, metadata: null, document: "A pool and a spa", includeVectors: false);
+
+        // Assert.
+        Assert.Equal("A pool and a spa", hotel.Description);
+    }
+
+    [Fact]
+    public void WritesNoDocumentWithoutAFullTextProperty()
+        => Assert.Null(new ChromaMapper<Hotel<string>>(BuildModel<string>())
+            .MapFromDataToStorageModel(new Hotel<string> { HotelId = "h1", HotelName = "Grand", Embedding = new float[] { 1, 2, 3, 4 } }, 0, generatedEmbeddings: null)
+            .Document);
+
+    [Fact]
+    public void WritesNoDocumentWithTwoFullTextProperties()
+        => Assert.Null(new ChromaMapper<TwoFullTextHotel>(new ChromaModelBuilder().Build(typeof(TwoFullTextHotel), typeof(string), definition: null, defaultEmbeddingGenerator: null))
+            .MapFromDataToStorageModel(new TwoFullTextHotel { HotelId = "h1", Description = "A pool", Review = "Great", Embedding = new float[] { 1, 2, 3, 4 } }, 0, generatedEmbeddings: null)
+            .Document);
+
+    [Fact]
     public void ThrowsWhenTheVectorIsMissing()
     {
         // Arrange.
@@ -84,7 +124,7 @@ public class ChromaMapperTests
         var metadata = new Dictionary<string, object> { ["HotelName"] = "Grand", ["Rating"] = 5L, ["Price"] = 120.5, ["Parking"] = true };
 
         // Act.
-        var hotel = sut.MapFromStorageToDataModel("11111111-1111-1111-1111-111111111111", new float[] { 1, 2, 3, 4 }, metadata, includeVectors);
+        var hotel = sut.MapFromStorageToDataModel("11111111-1111-1111-1111-111111111111", new float[] { 1, 2, 3, 4 }, metadata, document: null, includeVectors);
 
         // Assert.
         Assert.Equal(Guid.Parse("11111111-1111-1111-1111-111111111111"), hotel.HotelId);
@@ -102,7 +142,7 @@ public class ChromaMapperTests
         var sut = new ChromaMapper<Hotel<string>>(BuildModel<string>());
 
         // Act.
-        var hotel = sut.MapFromStorageToDataModel("h1", embedding: null, new Dictionary<string, object> { ["Price"] = 10.0 }, includeVectors: false);
+        var hotel = sut.MapFromStorageToDataModel("h1", embedding: null, new Dictionary<string, object> { ["Price"] = 10.0 }, document: null, includeVectors: false);
 
         // Assert.
         Assert.Null(hotel.HotelName);

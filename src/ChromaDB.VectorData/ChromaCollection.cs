@@ -215,6 +215,7 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
                     collection,
                     page,
                     where: null,
+                    whereDocument: null,
                     limit: null,
                     offset: null,
                     GetInclude(includeVectors),
@@ -222,7 +223,7 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
 
             foreach (var entry in entries)
             {
-                yield return _mapper.MapFromStorageToDataModel(entry.Id, entry.Embeddings, entry.Metadata, includeVectors);
+                yield return _mapper.MapFromStorageToDataModel(entry.Id, entry.Embeddings, entry.Metadata, entry.Document, includeVectors);
             }
         }
     }
@@ -304,6 +305,7 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
         var ids = new List<string>();
         var embeddings = new List<ReadOnlyMemory<float>>();
         var metadatas = new List<Dictionary<string, object>>();
+        var documents = new List<string>();
         var hasMetadata = false;
         var recordIndex = 0;
         foreach (var record in records)
@@ -317,6 +319,7 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
             ids.Add(storageRecord.Id);
             embeddings.Add(storageRecord.Embedding);
             metadatas.Add(storageRecord.Metadata!);
+            documents.Add(storageRecord.Document!);
             hasMetadata |= storageRecord.Metadata is not null;
         }
 
@@ -332,6 +335,7 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
                 ids,
                 embeddings,
                 hasMetadata ? metadatas : null,
+                _mapper.HasDocument ? documents : null,
                 cancellationToken), cancellationToken)).ConfigureAwait(false);
     }
 
@@ -365,6 +369,10 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
         }
 
         var include = ChromaQueryInclude.Metadatas | ChromaQueryInclude.Distances;
+        if (_mapper.HasDocument)
+        {
+            include |= ChromaQueryInclude.Documents;
+        }
         if (options.IncludeVectors)
         {
             include |= ChromaQueryInclude.Embeddings;
@@ -378,6 +386,7 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
                 vector,
                 top + options.Skip,
                 filter.Where,
+                filter.WhereDocument,
                 filter.Ids,
                 include,
                 cancellationToken), cancellationToken)).ConfigureAwait(false);
@@ -391,7 +400,7 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
             }
 
             yield return new VectorSearchResult<TRecord>(
-                _mapper.MapFromStorageToDataModel(entry.Id, entry.Embeddings, entry.Metadata, options.IncludeVectors),
+                _mapper.MapFromStorageToDataModel(entry.Id, entry.Embeddings, entry.Metadata, entry.Document, options.IncludeVectors),
                 score);
         }
     }
@@ -444,6 +453,7 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
                     collection,
                     chromaFilter.Ids,
                     chromaFilter.Where,
+                    chromaFilter.WhereDocument,
                     limit,
                     offset: options.Skip + read,
                     GetInclude(options.IncludeVectors),
@@ -451,7 +461,7 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
 
             foreach (var entry in entries)
             {
-                yield return _mapper.MapFromStorageToDataModel(entry.Id, entry.Embeddings, entry.Metadata, options.IncludeVectors);
+                yield return _mapper.MapFromStorageToDataModel(entry.Id, entry.Embeddings, entry.Metadata, entry.Document, options.IncludeVectors);
             }
 
             read += entries.Count;
@@ -475,10 +485,10 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
             null;
     }
 
-    private static ChromaGetInclude GetInclude(bool includeVectors)
-        => includeVectors
-            ? ChromaGetInclude.Metadatas | ChromaGetInclude.Embeddings
-            : ChromaGetInclude.Metadatas;
+    private ChromaGetInclude GetInclude(bool includeVectors)
+        => ChromaGetInclude.Metadatas
+            | (includeVectors ? ChromaGetInclude.Embeddings : 0)
+            | (_mapper.HasDocument ? ChromaGetInclude.Documents : 0);
 
     /// <summary>
     /// Get the Chroma collection, reading it the first time; record operations need its id.

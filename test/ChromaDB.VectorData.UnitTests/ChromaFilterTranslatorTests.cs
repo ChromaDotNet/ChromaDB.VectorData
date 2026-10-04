@@ -175,6 +175,40 @@ public class ChromaFilterTranslatorTests
     public void ThrowsForANegatedKeyCondition()
         => Assert.Throws<NotSupportedException>(() => TranslateFilter(h => !(h.HotelId == "h1")));
 
+    [Fact]
+    public void TranslatesContainsOnTheFullTextPropertyToWhereDocument()
+    {
+        var filter = TranslateFullText(h => h.Description!.Contains("pool"));
+
+        Assert.Equal("""{"$contains":"pool"}""", filter.WhereDocument!.ToString());
+        Assert.Null(filter.Where);
+    }
+
+    [Fact]
+    public void TranslatesANegatedContainsOnTheFullTextPropertyToNotContains()
+        => Assert.Equal("""{"$not_contains":"pool"}""", TranslateFullText(h => !h.Description!.Contains("pool")).WhereDocument!.ToString());
+
+    [Fact]
+    public void JoinsTextConditionsAndOtherConditionsWithAnd()
+    {
+        var filter = TranslateFullText(h => h.Description!.Contains("pool") && h.Rating >= 4 && h.Description.Contains("spa") && h.HotelId == "h1");
+
+        Assert.Equal("""{"$and":[{"$contains":"pool"},{"$contains":"spa"}]}""", filter.WhereDocument!.ToString());
+        Assert.Equal("""{"Rating":{"$gte":4}}""", filter.Where!.ToString());
+        Assert.Equal(["h1"], filter.Ids);
+    }
+
+    [Fact]
+    public void ThrowsForATextConditionInsideAnOr()
+        => Assert.Throws<NotSupportedException>(() => TranslateFullText(h => h.Description!.Contains("pool") || h.Rating >= 4));
+
+    [Fact]
+    public void ThrowsForContainsOnAStringPropertyThatIsNotTheDocument()
+        => Assert.Throws<NotSupportedException>(() => TranslateFilter(h => h.HotelName!.Contains("Grand")));
+
+    private static ChromaFilter TranslateFullText(Expression<Func<FullTextHotel, bool>> filter)
+        => new ChromaFilterTranslator().Translate(filter, new ChromaModelBuilder().Build(typeof(FullTextHotel), typeof(string), definition: null, defaultEmbeddingGenerator: null));
+
     private static string Translate(Expression<Func<Hotel<string>, bool>> filter)
     {
         var chromaFilter = TranslateFilter(filter);

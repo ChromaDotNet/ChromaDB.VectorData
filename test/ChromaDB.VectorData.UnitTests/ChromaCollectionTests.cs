@@ -93,8 +93,8 @@ public class ChromaCollectionTests
         List<ReadOnlyMemory<float>>? embeddings = null;
         List<Dictionary<string, object>>? metadatas = null;
         this._chromaClientMock
-            .Setup(x => x.UpsertAsync(this._chromaCollection, It.IsAny<List<string>>(), It.IsAny<List<ReadOnlyMemory<float>>>(), It.IsAny<List<Dictionary<string, object>>?>(), this._testCancellationToken))
-            .Callback<ChromaCollection, List<string>, List<ReadOnlyMemory<float>>, List<Dictionary<string, object>>?, CancellationToken>((_, i, e, m, _) => (ids, embeddings, metadatas) = (i, e, m))
+            .Setup(x => x.UpsertAsync(this._chromaCollection, It.IsAny<List<string>>(), It.IsAny<List<ReadOnlyMemory<float>>>(), It.IsAny<List<Dictionary<string, object>>?>(), It.IsAny<List<string>?>(), this._testCancellationToken))
+            .Callback<ChromaCollection, List<string>, List<ReadOnlyMemory<float>>, List<Dictionary<string, object>>?, List<string>?, CancellationToken>((_, i, e, m, _, _) => (ids, embeddings, metadatas) = (i, e, m))
             .Returns(Task.CompletedTask);
 
         // Act.
@@ -112,7 +112,7 @@ public class ChromaCollectionTests
         // Arrange.
         using var sut = this.CreateCollection<string, Hotel<string>>();
         this._chromaClientMock
-            .Setup(x => x.GetAsync(this._chromaCollection, new List<string> { "h1" }, null, null, null, ChromaGetInclude.Metadatas, this._testCancellationToken))
+            .Setup(x => x.GetAsync(this._chromaCollection, new List<string> { "h1" }, null, null, null, null, ChromaGetInclude.Metadatas, this._testCancellationToken))
             .ReturnsAsync([new ChromaCollectionEntry("h1") { Metadata = new() { ["HotelName"] = "Grand" } }]);
 
         // Act.
@@ -145,7 +145,7 @@ public class ChromaCollectionTests
         // Arrange.
         using var sut = this.CreateCollection<string, Hotel<string>>();
         this._chromaClientMock
-            .Setup(x => x.QueryAsync(this._chromaCollection, It.IsAny<ReadOnlyMemory<float>>(), 3, null, null, ChromaQueryInclude.Metadatas | ChromaQueryInclude.Distances, this._testCancellationToken))
+            .Setup(x => x.QueryAsync(this._chromaCollection, It.IsAny<ReadOnlyMemory<float>>(), 3, null, null, null, ChromaQueryInclude.Metadatas | ChromaQueryInclude.Distances, this._testCancellationToken))
             .ReturnsAsync(
             [
                 new ChromaCollectionQueryEntry("skipped") { Distance = 0.1f },
@@ -173,6 +173,7 @@ public class ChromaCollectionTests
                 It.IsAny<ReadOnlyMemory<float>>(),
                 2,
                 null,
+                null,
                 It.Is<List<string>>(ids => ids.SequenceEqual(new[] { "h1", "h2" })),
                 ChromaQueryInclude.Metadatas | ChromaQueryInclude.Distances,
                 this._testCancellationToken))
@@ -195,6 +196,7 @@ public class ChromaCollectionTests
                 this._chromaCollection,
                 It.Is<List<string>>(ids => ids.SequenceEqual(new[] { "h1" })),
                 It.IsNotNull<ChromaWhereOperator>(),
+                null,
                 5,
                 0,
                 ChromaGetInclude.Metadatas,
@@ -289,10 +291,10 @@ public class ChromaCollectionTests
             .Setup(x => x.DeleteAsync(this._chromaCollection, It.IsAny<List<string>>(), this._testCancellationToken))
             .Returns(Task.CompletedTask);
         this._chromaClientMock
-            .Setup(x => x.GetAsync(this._chromaCollection, It.IsAny<List<string>>(), null, null, null, ChromaGetInclude.Metadatas, this._testCancellationToken))
+            .Setup(x => x.GetAsync(this._chromaCollection, It.IsAny<List<string>>(), null, null, null, null, ChromaGetInclude.Metadatas, this._testCancellationToken))
             .ThrowsAsync(new ChromaException("Collection does not exist.") { StatusCode = System.Net.HttpStatusCode.NotFound, ErrorType = "NotFoundError" });
         this._chromaClientMock
-            .Setup(x => x.GetAsync(recreatedCollection, It.IsAny<List<string>>(), null, null, null, ChromaGetInclude.Metadatas, this._testCancellationToken))
+            .Setup(x => x.GetAsync(recreatedCollection, It.IsAny<List<string>>(), null, null, null, null, ChromaGetInclude.Metadatas, this._testCancellationToken))
             .ReturnsAsync([new ChromaCollectionEntry("h1")]);
 
         // Act: the delete keeps the id, the get finds that it no longer exists.

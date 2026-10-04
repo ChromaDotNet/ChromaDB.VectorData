@@ -12,6 +12,11 @@ namespace ChromaDB.VectorData;
 // https://docs.trychroma.com/docs/querying-collections/metadata-filtering
 internal class ChromaFilterTranslator : FilterTranslatorBase
 {
+    private const string TextFilterNotSupported
+        = "Chroma filters text with Contains only on the single full-text indexed string property, which is stored as the document, joined to the other conditions with &&.";
+
+    private DataPropertyModel? _documentProperty;
+
     private const string KeyFilterNotSupported
         = "Chroma filters on the key only with == or Contains over a list of keys, joined to the other conditions with &&.";
 
@@ -21,9 +26,12 @@ internal class ChromaFilterTranslator : FilterTranslatorBase
     internal ChromaFilter Translate(LambdaExpression lambdaExpression, CollectionModel model)
     {
         var preprocessedExpression = PreprocessFilter(lambdaExpression, model, new FilterPreprocessingOptions());
+        _documentProperty = ChromaFieldMapping.GetDocumentProperty(model);
 
         // The key of a record is its Chroma id, not a metadata field: conditions on it become the ids of the request.
+        // Chroma joins the where clause and the where_document clause with AND only, so text conditions are conjuncts too.
         List<string>? ids = null;
+        ChromaWhereDocumentOperator? whereDocument = null;
         var condition = Condition.All;
         foreach (var conjunct in GetConjuncts(preprocessedExpression))
         {
@@ -31,13 +39,17 @@ internal class ChromaFilterTranslator : FilterTranslatorBase
             {
                 ids = ids is null ? keys : ids.Intersect(keys).ToList();
             }
+            else if (TryTranslateTextCondition(conjunct, out var textCondition))
+            {
+                whereDocument = whereDocument is null ? textCondition : whereDocument & textCondition;
+            }
             else
             {
                 condition = And(condition, Translate(conjunct, negated: false));
             }
         }
 
-        return condition.MatchesNothing ? ChromaFilter.Nothing : ChromaFilter.Create(condition.Where, ids);
+        return condition.MatchesNothing ? ChromaFilter.Nothing : ChromaFilter.Create(condition.Where, whereDocument, ids);
     }
 
     private static IEnumerable<Expression> GetConjuncts(Expression expression)
@@ -76,6 +88,50 @@ internal class ChromaFilterTranslator : FilterTranslatorBase
             => key is null
                 ? throw new NotSupportedException("Chroma does not support filtering on a null key.")
                 : ChromaFieldMapping.ToId(key);
+    }
+
+    // r.Text.Contains("word") or !r.Text.Contains("word"), on the property stored as the document.
+    private bool TryTranslateTextCondition(Expression expression, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out ChromaWhereDocumentOperator? whereDocument)
+    {
+        var negated = false;
+        if (expression is UnaryExpression { NodeType: ExpressionType.Not } not)
+        {
+            negated = true;
+            expression = not.Operand;
+        }
+
+        if (_documentProperty is null
+            || !IsStringContains(expression, out var target, out var argument)
+            || !TryBindProperty(target, out var property)
+            || property != _documentProperty)
+        {
+            whereDocument = null;
+            return false;
+        }
+
+        if (!TryGetConstant(argument, out var value) || value is not string text)
+        {
+            throw new NotSupportedException("Chroma filters the text of the document with Contains over a constant string.");
+        }
+
+        whereDocument = negated ? ChromaWhereDocumentOperator.NotContains(text) : ChromaWhereDocumentOperator.Contains(text);
+        return true;
+    }
+
+    private static bool IsStringContains(Expression expression, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out Expression? target, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out Expression? argument)
+    {
+        if (expression is MethodCallExpression { Method.Name: nameof(string.Contains), Object: { } instance, Arguments: [var single] } call
+            && call.Method.DeclaringType == typeof(string)
+            && single.Type == typeof(string))
+        {
+            target = instance;
+            argument = single;
+            return true;
+        }
+
+        target = null;
+        argument = null;
+        return false;
     }
 
     private bool TryBindKey(Expression expression)
@@ -243,6 +299,9 @@ internal class ChromaFilterTranslator : FilterTranslatorBase
     private Condition TranslateMethodCall(MethodCallExpression methodCall, bool negated)
         => methodCall switch
         {
+            // string.Contains() on the document property is handled as a conjunct; Chroma has no substring filter on metadata.
+            _ when IsStringContains(methodCall, out _, out _) => throw new NotSupportedException(TextFilterNotSupported),
+
             // Enumerable.Contains(), List.Contains(), MemoryExtensions.Contains()
             _ when TryMatchContains(methodCall, out var source, out var item)
                 => TranslateContains(source, item, negated),

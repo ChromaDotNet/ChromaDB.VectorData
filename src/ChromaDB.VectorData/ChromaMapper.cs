@@ -10,7 +10,7 @@ namespace ChromaDB.VectorData;
 /// <summary>
 /// A record as Chroma stores it: an id, an embedding and metadata.
 /// </summary>
-internal readonly record struct ChromaStorageRecord(string Id, ReadOnlyMemory<float> Embedding, Dictionary<string, object>? Metadata);
+internal readonly record struct ChromaStorageRecord(string Id, ReadOnlyMemory<float> Embedding, Dictionary<string, object>? Metadata, string? Document);
 
 /// <summary>
 /// Mapper between a Chroma record and the consumer data model.
@@ -19,6 +19,11 @@ internal readonly record struct ChromaStorageRecord(string Id, ReadOnlyMemory<fl
 internal sealed class ChromaMapper<TRecord>(CollectionModel model)
     where TRecord : class
 {
+    private readonly DataPropertyModel? _documentProperty = ChromaFieldMapping.GetDocumentProperty(model);
+
+    /// <summary>Gets a value indicating whether the records have a Chroma document, from the full-text property.</summary>
+    public bool HasDocument => _documentProperty is not null;
+
     public ChromaStorageRecord MapFromDataToStorageModel(TRecord dataModel, int recordIndex, GeneratedEmbeddings<Embedding<float>>?[]? generatedEmbeddings)
     {
         var keyProperty = model.KeyProperty;
@@ -45,7 +50,10 @@ internal sealed class ChromaMapper<TRecord>(CollectionModel model)
                 ? model.VectorProperty.GetValueAsObject(dataModel)
                 : generatedEmbeddings[0]![recordIndex]);
 
-        return new ChromaStorageRecord(ChromaFieldMapping.ToId(key), embedding, metadata);
+        // The full-text property stays in the metadata too, for the filters on it.
+        var document = _documentProperty?.GetValueAsObject(dataModel) as string;
+
+        return new ChromaStorageRecord(ChromaFieldMapping.ToId(key), embedding, metadata, document);
 
         static ReadOnlyMemory<float> GetVector(PropertyModel property, object? embedding)
             => embedding switch
@@ -59,7 +67,7 @@ internal sealed class ChromaMapper<TRecord>(CollectionModel model)
             };
     }
 
-    public TRecord MapFromStorageToDataModel(string id, ReadOnlyMemory<float>? embedding, Dictionary<string, object>? metadata, bool includeVectors)
+    public TRecord MapFromStorageToDataModel(string id, ReadOnlyMemory<float>? embedding, Dictionary<string, object>? metadata, string? document, bool includeVectors)
     {
         var outputRecord = model.CreateRecord<TRecord>()!;
 
@@ -87,6 +95,11 @@ internal sealed class ChromaMapper<TRecord>(CollectionModel model)
             if (metadata is not null && metadata.TryGetValue(dataProperty.StorageName, out var value))
             {
                 dataProperty.SetValueAsObject(outputRecord, ChromaFieldMapping.FromMetadataValue(value, dataProperty.Type));
+            }
+            else if (dataProperty == _documentProperty && document is not null)
+            {
+                // A record written by another Chroma client has its text in the document only.
+                dataProperty.SetValueAsObject(outputRecord, document);
             }
             else if (!dataProperty.Type.IsValueType || Nullable.GetUnderlyingType(dataProperty.Type) is not null)
             {

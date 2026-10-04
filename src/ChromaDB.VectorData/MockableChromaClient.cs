@@ -128,6 +128,7 @@ internal class MockableChromaClient : IDisposable
     /// <param name="collection">The collection.</param>
     /// <param name="ids">The ids of the records, or <see langword="null"/> for any record.</param>
     /// <param name="where">The metadata filter, or <see langword="null"/> for no filter.</param>
+    /// <param name="whereDocument">The document filter, or <see langword="null"/> for no filter.</param>
     /// <param name="limit">The maximum number of records to return.</param>
     /// <param name="offset">The number of records to skip.</param>
     /// <param name="include">The fields to return.</param>
@@ -136,11 +137,12 @@ internal class MockableChromaClient : IDisposable
         ChromaCollection collection,
         List<string>? ids,
         ChromaWhereOperator? where,
+        ChromaWhereDocumentOperator? whereDocument,
         int? limit,
         int? offset,
         ChromaGetInclude include,
         CancellationToken cancellationToken = default)
-        => GetCollectionClient(collection).Get(ids, where, whereDocument: null, limit, offset, include, cancellationToken);
+        => GetCollectionClient(collection).Get(ids, where, whereDocument, limit, offset, include, cancellationToken);
 
     /// <summary>
     /// Find the records nearest to a vector.
@@ -149,6 +151,7 @@ internal class MockableChromaClient : IDisposable
     /// <param name="queryEmbedding">The vector to search for.</param>
     /// <param name="nResults">The number of records to return.</param>
     /// <param name="where">The metadata filter, or <see langword="null"/> for no filter.</param>
+    /// <param name="whereDocument">The document filter, or <see langword="null"/> for no filter.</param>
     /// <param name="ids">The ids the records must have, or <see langword="null"/> for any id.</param>
     /// <param name="include">The fields to return.</param>
     /// <param name="cancellationToken">The token to monitor for cancellation requests.</param>
@@ -157,12 +160,13 @@ internal class MockableChromaClient : IDisposable
         ReadOnlyMemory<float> queryEmbedding,
         int nResults,
         ChromaWhereOperator? where,
+        ChromaWhereDocumentOperator? whereDocument,
         List<string>? ids,
         ChromaQueryInclude include,
         CancellationToken cancellationToken = default)
     {
         var results = await GetCollectionClient(collection).Query(
-            new ChromaQuery([queryEmbedding]) { NResults = nResults, Where = where, Ids = ids, Include = include },
+            new ChromaQuery([queryEmbedding]) { NResults = nResults, Where = where, WhereDocument = whereDocument, Ids = ids, Include = include },
             cancellationToken).ConfigureAwait(false);
 
         return results[0];
@@ -175,14 +179,16 @@ internal class MockableChromaClient : IDisposable
     /// <param name="ids">The ids of the records.</param>
     /// <param name="embeddings">The vectors of the records, in the same order as <paramref name="ids"/>.</param>
     /// <param name="metadatas">The metadata of the records, in the same order as <paramref name="ids"/>.</param>
+    /// <param name="documents">The documents of the records, or <see langword="null"/> to leave them as they are.</param>
     /// <param name="cancellationToken">The token to monitor for cancellation requests.</param>
     public virtual Task UpsertAsync(
         ChromaCollection collection,
         List<string> ids,
         List<ReadOnlyMemory<float>> embeddings,
         List<Dictionary<string, object>>? metadatas,
+        List<string>? documents,
         CancellationToken cancellationToken = default)
-        => GetCollectionClient(collection).Upsert(ids, embeddings, metadatas, documents: null, cancellationToken);
+        => GetCollectionClient(collection).Upsert(ids, embeddings, metadatas, documents, cancellationToken);
 
     /// <summary>
     /// Delete records by their ids.

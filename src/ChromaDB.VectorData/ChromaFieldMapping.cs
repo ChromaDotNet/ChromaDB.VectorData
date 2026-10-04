@@ -4,6 +4,7 @@
 using System.Collections;
 using System.Diagnostics;
 using System.Globalization;
+using Microsoft.Extensions.VectorData.ProviderServices;
 
 namespace ChromaDB.VectorData;
 
@@ -12,6 +13,17 @@ namespace ChromaDB.VectorData;
 /// </summary>
 internal static class ChromaFieldMapping
 {
+    /// <summary>
+    /// Get the data property whose value is also the Chroma document of a record, the text that Chroma searches with
+    /// <c>where_document</c> and that other Chroma clients store: the only full-text indexed string property, or
+    /// <see langword="null"/> when there is none or more than one, as a record has one document.
+    /// </summary>
+    public static DataPropertyModel? GetDocumentProperty(CollectionModel model)
+    {
+        var fullTextProperties = model.DataProperties.Where(p => p.IsFullTextIndexed && p.Type == typeof(string)).Take(2).ToList();
+        return fullTextProperties.Count == 1 ? fullTextProperties[0] : null;
+    }
+
     /// <summary>
     /// Convert the given key to a Chroma record id.
     /// </summary>
