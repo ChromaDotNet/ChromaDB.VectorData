@@ -1,4 +1,4 @@
-﻿// Licensed to the .NET Foundation under one or more agreements.
+// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Diagnostics.CodeAnalysis;
@@ -7,16 +7,16 @@ using Microsoft.Extensions.VectorData.ProviderServices;
 
 namespace ChromaDB.VectorData;
 
-internal class ChromaModelBuilder(bool hasNamedVectors) : CollectionModelBuilder(GetModelBuildOptions(hasNamedVectors))
+internal class ChromaModelBuilder() : CollectionModelBuilder(s_modelBuildingOptions)
 {
     internal const string SupportedVectorTypes = "ReadOnlyMemory<float>, Embedding<float>, float[]";
 
-    private static CollectionModelBuildingOptions GetModelBuildOptions(bool hasNamedVectors)
-        => new()
-        {
-            RequiresAtLeastOneVector = !hasNamedVectors,
-            SupportsMultipleVectors = hasNamedVectors,
-        };
+    // A Chroma record has exactly one embedding.
+    private static readonly CollectionModelBuildingOptions s_modelBuildingOptions = new()
+    {
+        RequiresAtLeastOneVector = true,
+        SupportsMultipleVectors = false,
+    };
 
     protected override void ValidateKeyProperty(KeyPropertyModel keyProperty)
     {
@@ -24,10 +24,10 @@ internal class ChromaModelBuilder(bool hasNamedVectors) : CollectionModelBuilder
 
         var type = keyProperty.Type;
 
-        if (type != typeof(ulong) && type != typeof(Guid))
+        if (type != typeof(string) && type != typeof(Guid))
         {
             throw new NotSupportedException(
-                $"Property '{keyProperty.ModelName}' has unsupported type '{type.Name}'. Key properties must be either ulong or Guid.");
+                $"Property '{keyProperty.ModelName}' has unsupported type '{type.Name}'. Key properties must be either string or Guid.");
         }
     }
 
