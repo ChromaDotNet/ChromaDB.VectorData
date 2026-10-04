@@ -1,14 +1,14 @@
 <Project>
   <ItemGroup>
-    <PackageVersion Include="System.Linq.AsyncEnumerable" Version="10.0.10" />
-    <PackageVersion Include="System.Text.Json" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.8.3" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.10" />
+    <PackageVersion Include="System.Linq.AsyncEnumerable" Version="10.0.12" />
+    <PackageVersion Include="System.Text.Json" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.10.1" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
   </ItemGroup>
 
   <ItemGroup Label="MEVD">
-    <PackageVersion Include="Microsoft.Extensions.VectorData.Abstractions" Version="10.8.2" />
-    <PackageVersion Include="Microsoft.Extensions.VectorData.ConformanceTests" Version="10.8.2" />
+    <PackageVersion Include="Microsoft.Extensions.VectorData.Abstractions" Version="10.10.0" />
+    <PackageVersion Include="Microsoft.Extensions.VectorData.ConformanceTests" Version="10.10.0" />
     <PackageVersion Include="ChromaDotNet.Client" Version="2.2.0" />
   </ItemGroup>
 
@@ -18,7 +18,7 @@
 
   <ItemGroup Label="Test">
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.7.0" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.12" />
     <PackageVersion Include="xunit.v3" Version="3.2.2" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
     <PackageVersion Include="coverlet.collector" Version="8.0.1" />
