@@ -17,7 +17,7 @@
     <PackageReference Include="System.Linq.AsyncEnumerable" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.AI.Abstractions" />
-    <PackageReference Include="Qdrant.Client" />
+    <PackageReference Include="ChromaDotNet.Client" />
   </ItemGroup>
 
   <ItemGroup Condition=" '$(TargetFramework)' == 'netstandard2.0' Or '$(TargetFramework)' == 'net462' ">

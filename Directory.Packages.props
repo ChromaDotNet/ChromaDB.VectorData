@@ -19,7 +19,7 @@
     <PackageVersion Include="Npgsql" Version="10.0.3" />
     <PackageVersion Include="NRedisStack" Version="1.6.0" />
     <PackageVersion Include="Pgvector" Version="0.3.2" />
-    <PackageVersion Include="Qdrant.Client" Version="1.18.1" />
+    <PackageVersion Include="ChromaDotNet.Client" Version="2.2.0" />
     <PackageVersion Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
     <PackageVersion Include="sqlite-vec" Version="0.1.7-alpha.2.1" />
   </ItemGroup>
