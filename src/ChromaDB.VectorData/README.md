@@ -84,4 +84,4 @@ services.AddChromaVectorStore("http://localhost:8000");
 - Array properties need Chroma 1.5.0 or later.
 - Hybrid search is not supported.
 
-The provider runs the Microsoft.Extensions.VectorData conformance tests against Chroma 1.5.0, 1.5.9 and the latest release.
+The provider runs the Microsoft.Extensions.VectorData conformance tests against Chroma 1.5.0, 1.5.9 and the latest release, and passes them on Chroma Cloud.
