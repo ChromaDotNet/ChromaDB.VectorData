@@ -1,0 +1,6 @@
+<Project>
+
+  <!-- The repository settings, without the test packages of test/Directory.Build.props. -->
+  <Import Project="$(MSBuildThisFileDirectory)../../Directory.Build.props" />
+
+</Project>

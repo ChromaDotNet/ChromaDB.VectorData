@@ -89,10 +89,52 @@ jobs:
       - name: Test
         run: dotnet test test/ChromaDB.VectorData.ConformanceTests
 
+  # The dynamic collection is the way to use the provider with NativeAOT: a trimming or NativeAOT warning fails the publish,
+  # and the native program checks the provider against Chroma.
+  native-aot:
+    name: NativeAOT
+    needs: build
+    runs-on: ubuntu-latest
+    services:
+      chroma:
+        image: chromadb/chroma:1.5.9
+        ports:
+          - 8000:8000
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ hashFiles('Directory.Packages.props') }}
+          restore-keys: nuget-
+
+      - name: Install the NativeAOT prerequisites
+        run: sudo apt-get install -y clang zlib1g-dev
+
+      - name: Publish
+        run: dotnet publish test/NativeAot -c Release -o native-aot
+
+      - name: Wait for Chroma
+        run: |
+          for attempt in $(seq 1 30); do
+            curl -sf http://localhost:8000/api/v2/heartbeat && exit 0
+            sleep 2
+          done
+          exit 1
+
+      - name: Run
+        run: ./native-aot/ChromaDB.VectorData.NativeAot
+
   # Every run packs the provider; only a version tag publishes it, with the version set in the project file.
   package:
     name: Package
-    needs: [unit-tests, conformance-tests]
+    needs: [unit-tests, conformance-tests, native-aot]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6

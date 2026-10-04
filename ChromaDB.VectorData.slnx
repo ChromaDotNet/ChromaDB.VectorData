@@ -14,5 +14,6 @@
     <File Path="test/Directory.Build.props" />
     <Project Path="test/ChromaDB.VectorData.UnitTests/ChromaDB.VectorData.UnitTests.csproj" />
     <Project Path="test/ChromaDB.VectorData.ConformanceTests/ChromaDB.VectorData.ConformanceTests.csproj" />
+    <Project Path="test/NativeAot/ChromaDB.VectorData.NativeAot.csproj" />
   </Folder>
 </Solution>
