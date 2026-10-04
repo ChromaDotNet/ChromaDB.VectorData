@@ -16,6 +16,12 @@ dotnet test test/ChromaDB.VectorData.ConformanceTests
 
 The conformance tests start Chroma in a container with [Testcontainers](https://dotnet.testcontainers.org/), so they need Docker.
 
+`CHROMA_IMAGE` picks another Chroma release, like `chromadb/chroma:1.5.0`. To run them against a server already running, like Chroma Cloud, set the same variables as the tests of ChromaDotNet.Client; the tests delete only the collections they create:
+
+```bash
+CHROMA_TEST_URI=https://api.trychroma.com CHROMA_TEST_TOKEN=<api key> CHROMA_TEST_TENANT=<tenant> CHROMA_TEST_DATABASE=<database> CHROMA_TEST_MAX_BATCH_SIZE=300 dotnet test test/ChromaDB.VectorData.ConformanceTests
+```
+
 ## Origin
 
 The provider started as a copy of the Qdrant provider of [CommunityToolkit/AI](https://github.com/CommunityToolkit/AI), under the MIT license, adapted to Chroma.
