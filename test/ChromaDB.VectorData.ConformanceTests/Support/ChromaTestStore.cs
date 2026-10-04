@@ -1,10 +1,10 @@
-﻿// Licensed to the .NET Foundation under one or more agreements.
+// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using ChromaDB.Client;
+using DotNet.Testcontainers.Builders;
+using DotNet.Testcontainers.Containers;
 using Microsoft.Extensions.VectorData;
-using ChromaDB.VectorData;
-using Qdrant.Client;
-using Testcontainers.Qdrant;
 using VectorData.ConformanceTests.Support;
 
 namespace ChromaDB.VectorData.ConformanceTests.Support;
@@ -13,48 +13,49 @@ namespace ChromaDB.VectorData.ConformanceTests.Support;
 
 internal sealed class ChromaTestStore : TestStore
 {
-    public static ChromaTestStore NamedVectorsInstance { get; } = new(hasNamedVectors: true);
-    public static ChromaTestStore UnnamedVectorInstance { get; } = new(hasNamedVectors: false);
+    private const ushort ChromaPort = 8000;
 
-    // Qdrant doesn't support the default Flat index kind
+    public static ChromaTestStore Instance { get; } = new();
+
+    // Chroma indexes vectors with HNSW only
     public override string DefaultIndexKind => IndexKind.Hnsw;
 
-    private readonly QdrantContainer _container = new QdrantBuilder("qdrant/qdrant:v1.17.0").Build();
-    private readonly bool _hasNamedVectors;
-    private QdrantClient? _client;
+    private readonly IContainer _container = new ContainerBuilder("chromadb/chroma:1.5.9")
+        .WithPortBinding(ChromaPort, assignRandomHostPort: true)
+        .WithWaitStrategy(Wait.ForUnixContainer().UntilHttpRequestIsSucceeded(request => request.ForPath("/api/v2/heartbeat").ForPort(ChromaPort)))
+        .Build();
 
-    public QdrantClient Client => this._client ?? throw new InvalidOperationException("Not initialized");
+    private HttpClient? _httpClient;
+
+    public ChromaConfigurationOptions ChromaOptions { get; private set; } = null!;
+
+    public HttpClient HttpClient => this._httpClient ?? throw new InvalidOperationException("Not initialized");
 
     public ChromaVectorStore GetVectorStore(ChromaVectorStoreOptions options)
-        => new(this.Client,
+        => new(this.ChromaOptions,
+            this.HttpClient,
             ownsClient: false, // The client is shared, it's not owned by the vector store.
             new()
             {
-                HasNamedVectors = options.HasNamedVectors,
                 EmbeddingGenerator = options.EmbeddingGenerator
             });
 
-    private ChromaTestStore(bool hasNamedVectors) => this._hasNamedVectors = hasNamedVectors;
-
-    /// <summary>
-    /// Qdrant normalizes vectors on upsert, so we cannot compare
-    /// what we upserted and what we retrieve, we can only check
-    /// that a vector was returned.
-    /// https://github.com/qdrant/qdrant-client/discussions/727
-    /// </summary>
-    public override bool VectorsComparable => false;
+    private ChromaTestStore()
+    {
+    }
 
     protected override async Task StartAsync()
     {
         await this._container.StartAsync();
-        this._client = new QdrantClient(this._container.Hostname, this._container.GetMappedPublicPort(QdrantBuilder.QdrantGrpcPort));
+        this.ChromaOptions = new ChromaConfigurationOptions($"http://{this._container.Hostname}:{this._container.GetMappedPublicPort(ChromaPort)}");
+        this._httpClient = new HttpClient();
         // The client is shared, it's not owned by the vector store.
-        this.DefaultVectorStore = new ChromaVectorStore(this._client, ownsClient: false, new() { HasNamedVectors = this._hasNamedVectors });
+        this.DefaultVectorStore = new ChromaVectorStore(this.ChromaOptions, this._httpClient, ownsClient: false);
     }
 
     protected override async Task StopAsync()
     {
-        this._client?.Dispose();
+        this._httpClient?.Dispose();
         await this._container.StopAsync();
     }
 }

@@ -1,4 +1,4 @@
-﻿// Licensed to the .NET Foundation under one or more agreements.
+// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using Microsoft.Extensions.AI;
@@ -16,44 +16,44 @@ public class ChromaEmbeddingGenerationTests(ChromaEmbeddingGenerationTests.Strin
 {
     public new class StringVectorFixture : EmbeddingGenerationTests<Guid>.StringVectorFixture
     {
-        public override TestStore TestStore => ChromaTestStore.UnnamedVectorInstance;
+        public override TestStore TestStore => ChromaTestStore.Instance;
 
         public override VectorStore CreateVectorStore(IEmbeddingGenerator? embeddingGenerator)
-            => ChromaTestStore.UnnamedVectorInstance.GetVectorStore(new() { EmbeddingGenerator = embeddingGenerator });
+            => ChromaTestStore.Instance.GetVectorStore(new() { EmbeddingGenerator = embeddingGenerator });
 
         public override Func<IServiceCollection, IServiceCollection>[] DependencyInjectionStoreRegistrationDelegates =>
         [
             services => services
-                .AddSingleton(ChromaTestStore.UnnamedVectorInstance.Client)
+                .AddSingleton(ChromaTestStore.Instance.ChromaOptions)
                 .AddChromaVectorStore()
         ];
 
         public override Func<IServiceCollection, IServiceCollection>[] DependencyInjectionCollectionRegistrationDelegates =>
         [
             services => services
-                .AddSingleton(ChromaTestStore.UnnamedVectorInstance.Client)
+                .AddSingleton(ChromaTestStore.Instance.ChromaOptions)
                 .AddChromaCollection<Guid, RecordWithAttributes>(this.CollectionName)
         ];
     }
 
     public new class RomOfFloatVectorFixture : EmbeddingGenerationTests<Guid>.RomOfFloatVectorFixture
     {
-        public override TestStore TestStore => ChromaTestStore.UnnamedVectorInstance;
+        public override TestStore TestStore => ChromaTestStore.Instance;
 
         public override VectorStore CreateVectorStore(IEmbeddingGenerator? embeddingGenerator)
-            => ChromaTestStore.UnnamedVectorInstance.GetVectorStore(new() { EmbeddingGenerator = embeddingGenerator });
+            => ChromaTestStore.Instance.GetVectorStore(new() { EmbeddingGenerator = embeddingGenerator });
 
         public override Func<IServiceCollection, IServiceCollection>[] DependencyInjectionStoreRegistrationDelegates =>
         [
             services => services
-                .AddSingleton(ChromaTestStore.UnnamedVectorInstance.Client)
+                .AddSingleton(ChromaTestStore.Instance.ChromaOptions)
                 .AddChromaVectorStore()
         ];
 
         public override Func<IServiceCollection, IServiceCollection>[] DependencyInjectionCollectionRegistrationDelegates =>
         [
             services => services
-                .AddSingleton(ChromaTestStore.UnnamedVectorInstance.Client)
+                .AddSingleton(ChromaTestStore.Instance.ChromaOptions)
                 .AddChromaCollection<Guid, RecordWithAttributes>(this.CollectionName)
         ];
     }
