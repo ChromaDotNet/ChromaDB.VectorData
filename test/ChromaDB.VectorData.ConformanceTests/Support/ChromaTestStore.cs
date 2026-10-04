@@ -1,6 +1,7 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Linq.Expressions;
 using ChromaDB.Client;
 using Microsoft.Extensions.VectorData;
 using Testcontainers.Chroma;
@@ -52,6 +53,29 @@ internal sealed class ChromaTestStore : TestStore
             {
                 EmbeddingGenerator = options.EmbeddingGenerator
             });
+
+    /// <summary>
+    /// When the records don't appear in the vector search, also tells how many of them a filtered get returns:
+    /// a write that didn't reach Chroma and a vector search that misses records Chroma holds fail the same way otherwise.
+    /// </summary>
+    public override async Task WaitForDataAsync<TKey, TRecord>(
+        VectorStoreCollection<TKey, TRecord> collection,
+        int recordCount,
+        Expression<Func<TRecord, bool>>? filter = null,
+        Expression<Func<TRecord, object?>>? vectorProperty = null,
+        int? vectorSize = null,
+        object? dummyVector = null)
+    {
+        try
+        {
+            await base.WaitForDataAsync(collection, recordCount, filter, vectorProperty, vectorSize, dummyVector);
+        }
+        catch (InvalidOperationException exception)
+        {
+            var stored = await collection.GetAsync(filter ?? (_ => true), top: recordCount + 10).CountAsync();
+            throw new InvalidOperationException($"{exception.Message} A filtered get returns {stored} of the {recordCount} records.", exception);
+        }
+    }
 
     private ChromaTestStore()
     {
