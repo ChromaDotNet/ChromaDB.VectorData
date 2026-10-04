@@ -9,7 +9,7 @@
   <ItemGroup Label="MEVD">
     <PackageVersion Include="Microsoft.Extensions.VectorData.Abstractions" Version="10.10.0" />
     <PackageVersion Include="Microsoft.Extensions.VectorData.ConformanceTests" Version="10.10.0" />
-    <PackageVersion Include="ChromaDotNet.Client" Version="2.3.0" />
+    <PackageVersion Include="ChromaDotNet.Client" Version="2.4.0" />
   </ItemGroup>
 
   <ItemGroup Label="Build">
