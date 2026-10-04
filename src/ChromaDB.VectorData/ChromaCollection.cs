@@ -155,9 +155,12 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
         // and the provider has no hybrid search, the only operation that uses a full-text index.
         var definition = ChromaCollectionCreateMapping.MapCollectionDefinition(Name, _model.VectorProperty);
 
-        _chromaCollection = await RunOperationAsync(
+        var collection = await RunOperationAsync(
             "EnsureCollectionExists",
             () => _chromaClient.GetOrCreateCollectionAsync(definition, cancellationToken)).ConfigureAwait(false);
+
+        // An existing collection keeps its space, which can differ from the one of the definition.
+        _chromaCollection = VerifySpace(collection);
     }
 
     /// <inheritdoc />
@@ -452,7 +455,24 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
     /// Get the Chroma collection, reading it the first time; record operations need its id.
     /// </summary>
     private async Task<ChromaCollection> GetChromaCollectionAsync(CancellationToken cancellationToken)
-        => _chromaCollection ??= await _chromaClient.GetCollectionAsync(Name, cancellationToken).ConfigureAwait(false);
+        => _chromaCollection ??= VerifySpace(await _chromaClient.GetCollectionAsync(Name, cancellationToken).ConfigureAwait(false));
+
+    /// <summary>
+    /// Check that the collection uses the space of the distance function of the vector property: the scores are computed from
+    /// the distances that Chroma returns, so the distances of another space, like the l2 that Chroma uses by default, would give
+    /// wrong scores. A collection whose space Chroma does not report is accepted.
+    /// </summary>
+    private ChromaCollection VerifySpace(ChromaCollection collection)
+    {
+        var expectedSpace = ChromaCollectionCreateMapping.GetSpace(_model.VectorProperty);
+
+        return collection.Space is { } space && space != expectedSpace
+            ? throw new InvalidOperationException(
+                $"The Chroma collection '{Name}' uses the space '{space}', but the distance function '{_model.VectorProperty.DistanceFunction ?? DistanceFunction.CosineSimilarity}' " +
+                $"of the vector property '{_model.VectorProperty.ModelName}' needs the space '{expectedSpace}'. " +
+                $"Use a distance function of the space '{space}', or another collection.")
+            : collection;
+    }
 
     /// <summary>
     /// Run the given operation and wrap any <see cref="ChromaException"/> or <see cref="HttpRequestException"/> with <see cref="VectorStoreException"/>.

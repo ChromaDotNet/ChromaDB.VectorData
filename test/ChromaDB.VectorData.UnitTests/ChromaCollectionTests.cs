@@ -235,6 +235,47 @@ public class ChromaCollectionTests
     }
 
     [Fact]
+    public async Task EnsureCollectionExistsThrowsForAnExistingCollectionWithAnotherSpaceAsync()
+    {
+        // Arrange: a collection created elsewhere with the default space of Chroma, l2, and a model with cosine.
+        using var sut = this.CreateCollection<string, Hotel<string>>();
+        this._chromaClientMock
+            .Setup(x => x.GetOrCreateCollectionAsync(It.IsAny<ChromaCollectionDefinition>(), this._testCancellationToken))
+            .ReturnsAsync(new ChromaCollection(TestCollectionName) { Id = Guid.NewGuid(), Metadata = new() { ["hnsw:space"] = "l2" } });
+
+        // Act and assert.
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => sut.EnsureCollectionExistsAsync(this._testCancellationToken));
+        Assert.Contains("'L2'", exception.Message);
+        Assert.Contains("'Cosine'", exception.Message);
+    }
+
+    [Fact]
+    public async Task SearchThrowsForAnExistingCollectionWithAnotherSpaceAsync()
+    {
+        // Arrange: the model uses the dot product, the collection cosine.
+        using var sut = new ChromaCollection<string, DotProductHotel>(() => this._chromaClientMock.Object, "othercollection", null);
+        this._chromaClientMock
+            .Setup(x => x.GetCollectionAsync("othercollection", this._testCancellationToken))
+            .ReturnsAsync(new ChromaCollection("othercollection") { Id = Guid.NewGuid(), Metadata = new() { ["hnsw:space"] = "cosine" } });
+
+        // Act and assert.
+        await Assert.ThrowsAsync<InvalidOperationException>(async () => await sut.SearchAsync(new ReadOnlyMemory<float>([1, 2, 3, 4]), top: 1, cancellationToken: this._testCancellationToken).ToListAsync());
+    }
+
+    [Fact]
+    public async Task EnsureCollectionExistsAcceptsAnExistingCollectionWithTheSameSpaceAsync()
+    {
+        // Arrange.
+        using var sut = this.CreateCollection<string, DotProductHotel>();
+        this._chromaClientMock
+            .Setup(x => x.GetOrCreateCollectionAsync(It.IsAny<ChromaCollectionDefinition>(), this._testCancellationToken))
+            .ReturnsAsync(new ChromaCollection(TestCollectionName) { Id = Guid.NewGuid(), Metadata = new() { ["hnsw:space"] = "ip" } });
+
+        // Act.
+        await sut.EnsureCollectionExistsAsync(this._testCancellationToken);
+    }
+
+    [Fact]
     public async Task GetWithOrderByThrowsAsync()
     {
         using var sut = this.CreateCollection<string, Hotel<string>>();
