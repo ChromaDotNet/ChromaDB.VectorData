@@ -25,7 +25,8 @@ using ChromaDB.Client;
 using ChromaDB.VectorData;
 using Microsoft.Extensions.VectorData;
 
-using var vectorStore = new ChromaVectorStore(new ChromaConfigurationOptions("http://localhost:8000"), new HttpClient(), ownsClient: true);
+using var httpClient = new HttpClient();
+using var vectorStore = new ChromaVectorStore(new ChromaClient(new ChromaConfigurationOptions("http://localhost:8000"), httpClient));
 
 var collection = vectorStore.GetCollection<string, Hotel>("hotels");
 await collection.EnsureCollectionExistsAsync();
@@ -53,7 +54,14 @@ public sealed class Hotel
 }
 ```
 
-With dependency injection:
+With dependency injection, the vector store takes the `ChromaClient` of the container, like the singleton that [ChromaDotNet.Client.DependencyInjection](https://www.nuget.org/packages/ChromaDotNet.Client.DependencyInjection) registers with an `HttpClient` from `IHttpClientFactory`:
+
+```csharp
+services.AddChromaClient(_ => new ChromaConfigurationOptions("http://localhost:8000"));
+services.AddChromaVectorStore();
+```
+
+Or it creates its own client:
 
 ```csharp
 services.AddChromaVectorStore("http://localhost:8000");
