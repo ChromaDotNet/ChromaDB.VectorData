@@ -46,6 +46,10 @@ public class ChromaDependencyInjectionTests
                 : services.AddKeyedChromaCollection<string, Record>(serviceKey, name, Uri, lifetime: lifetime);
 
             yield return (services, serviceKey, name, lifetime) => serviceKey is null
+                ? services.AddChromaCollection<string, Record>(name, new ChromaConfigurationOptions(Uri).WithBatchSplitting(300), lifetime: lifetime)
+                : services.AddKeyedChromaCollection<string, Record>(serviceKey, name, new ChromaConfigurationOptions(Uri).WithBatchSplitting(300), lifetime: lifetime);
+
+            yield return (services, serviceKey, name, lifetime) => serviceKey is null
                 ? services.AddChromaCollection<string, Record>(
                     name, sp => new ChromaClient(new ChromaConfigurationOptions(UriProvider(sp)), new HttpClient()), lifetime: lifetime)
                 : services.AddKeyedChromaCollection<string, Record>(
@@ -62,6 +66,10 @@ public class ChromaDependencyInjectionTests
                 : services.AddKeyedChromaVectorStore(serviceKey, Uri, lifetime: lifetime);
 
             yield return (services, serviceKey, lifetime) => serviceKey is null
+                ? services.AddChromaVectorStore(new ChromaConfigurationOptions(Uri).WithBatchSplitting(300), lifetime: lifetime)
+                : services.AddKeyedChromaVectorStore(serviceKey, new ChromaConfigurationOptions(Uri).WithBatchSplitting(300), lifetime: lifetime);
+
+            yield return (services, serviceKey, lifetime) => serviceKey is null
                 ? AddClient(services)
                     .AddChromaVectorStore(lifetime: lifetime)
                 : AddClient(services)
@@ -73,6 +81,36 @@ public class ChromaDependencyInjectionTests
                 : services.AddKeyedChromaVectorStore(
                     serviceKey, sp => new ChromaClient(new ChromaConfigurationOptions(UriProvider(sp, serviceKey)), new HttpClient()), lifetime: lifetime);
         }
+    }
+
+    [Fact]
+    public void ChromaOptionsReachTheClient()
+    {
+        IServiceCollection services = new ServiceCollection();
+        var chromaOptions = new ChromaConfigurationOptions(Uri, defaultTenant: "tenant1", defaultDatabase: "database1");
+        services.AddChromaVectorStore(chromaOptions);
+        services.AddChromaCollection<string, Record>("collection1", chromaOptions);
+
+        using var serviceProvider = services.BuildServiceProvider();
+        var store = serviceProvider.GetRequiredService<ChromaVectorStore>();
+        var collection = serviceProvider.GetRequiredService<ChromaCollection<string, Record>>();
+
+        foreach (var client in new[] { (ChromaClient)store.GetService(typeof(ChromaClient))!, (ChromaClient)collection.GetService(typeof(ChromaClient))! })
+        {
+            Assert.Equal("tenant1", client.Options.Tenant);
+            Assert.Equal("database1", client.Options.Database);
+        }
+    }
+
+    [Fact]
+    public void ChromaOptionsCantBeNull()
+    {
+        IServiceCollection services = new ServiceCollection();
+
+        Assert.Throws<ArgumentNullException>(() => services.AddChromaVectorStore(chromaOptions: null!));
+        Assert.Throws<ArgumentNullException>(() => services.AddKeyedChromaVectorStore(serviceKey: "notNull", chromaOptions: null!));
+        Assert.Throws<ArgumentNullException>(() => services.AddChromaCollection<string, Record>(name: "notNull", chromaOptions: null!));
+        Assert.Throws<ArgumentNullException>(() => services.AddKeyedChromaCollection<string, Record>(serviceKey: "notNull", name: "notNull", chromaOptions: null!));
     }
 
     [Fact]

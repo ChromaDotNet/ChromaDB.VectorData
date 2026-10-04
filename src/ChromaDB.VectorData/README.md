@@ -61,10 +61,14 @@ services.AddChromaClient(_ => new ChromaConfigurationOptions("http://localhost:8
 services.AddChromaVectorStore();
 ```
 
-Or it creates its own client:
+Or it creates its own client, from a URI or from the options of the client, like those of Chroma Cloud:
 
 ```csharp
 services.AddChromaVectorStore("http://localhost:8000");
+
+services.AddChromaVectorStore(new ChromaConfigurationOptions("https://api.trychroma.com", defaultTenant: "<tenant>", defaultDatabase: "<database>")
+    .WithChromaToken("<api key>")
+    .WithBatchSplitting(maxBatchSize: 300));
 ```
 
 ## Supported
