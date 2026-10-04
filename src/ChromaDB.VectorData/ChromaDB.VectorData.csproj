@@ -1,14 +1,16 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   
   <PropertyGroup>
-    <Version>1.0.0</Version>
+    <VersionPrefix>0.1.0</VersionPrefix>
     <AssemblyName>ChromaDB.VectorData</AssemblyName>
+    <PackageId>ChromaDotNet.VectorData</PackageId>
     <RootNamespace>$(AssemblyName)</RootNamespace>
     <TargetFrameworks>net10.0;net8.0;netstandard2.0;net462</TargetFrameworks>
     <IsAotCompatible Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">true</IsAotCompatible>
 
     <Title>Chroma provider for Microsoft.Extensions.VectorData</Title>
-    <Description>Qdrant provider for Microsoft.Extensions.VectorData by the .NET Community Toolkit</Description>
+    <Description>Chroma provider for Microsoft.Extensions.VectorData, built on ChromaDotNet.Client.</Description>
+    <PackageTags>chroma chromadb vector database vectordata ai</PackageTags>
   </PropertyGroup>
   
   <ItemGroup>

@@ -17,14 +17,13 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <Authors>Microsoft.Toolkit,dotnetfoundation,Community Toolkit</Authors>
-    <Company>.NET Foundation</Company>
-    <Copyright>(c) .NET Foundation and Contributors. All rights reserved.</Copyright>
+    <Authors>ChromaDotNet contributors</Authors>
+    <Copyright>Copyright (c) .NET Foundation and Contributors. Copyright (c) 2026 ChromaDotNet contributors.</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageProjectUrl>https://github.com/CommunityToolkit/AI</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/CommunityToolkit/AI</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/ChromaDotNet/ChromaDB.VectorData</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/ChromaDotNet/ChromaDB.VectorData</RepositoryUrl>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
-    <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
