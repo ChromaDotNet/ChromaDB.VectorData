@@ -4,9 +4,6 @@
 using System;
 using System.Linq;
 using System.Linq.Expressions;
-using System.Reflection;
-using System.Text.Json;
-using ChromaDB.Client;
 using Microsoft.Extensions.VectorData.ProviderServices;
 using Xunit;
 
@@ -105,8 +102,7 @@ public class ChromaFilterTranslatorTests
         var where = new ChromaFilterTranslator().Translate(filter, s_model);
         Assert.NotNull(where);
 
-        // The where clause sent to Chroma; ChromaDotNet.Client builds it internally.
-        var toWhere = typeof(ChromaWhereOperator).GetMethod("ToWhere", BindingFlags.Instance | BindingFlags.NonPublic)!;
-        return JsonSerializer.Serialize(toWhere.Invoke(where, null));
+        // The JSON that ChromaDotNet.Client sends in the where clause.
+        return where.ToString()!;
     }
 }
