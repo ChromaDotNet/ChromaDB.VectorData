@@ -1,29 +1,26 @@
-﻿// Licensed to the .NET Foundation under one or more agreements.
+// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using System.Collections;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
-using Grpc.Core;
+using ChromaDB.Client;
+using ChromaDB.Client.Models;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.VectorData;
 using Microsoft.Extensions.VectorData.ProviderServices;
-using Qdrant.Client;
-using Qdrant.Client.Grpc;
 using Microsoft.Shared.Diagnostics;
 
 namespace ChromaDB.VectorData;
 
 /// <summary>
-/// Service for storing and retrieving vector records, that uses Qdrant as the underlying storage.
+/// Service for storing and retrieving vector records, that uses Chroma as the underlying storage.
 /// </summary>
-/// <typeparam name="TKey">The data type of the record key. Can be either <see cref="Guid"/> or <see cref="ulong"/>.</typeparam>
+/// <typeparam name="TKey">The data type of the record key. Can be either <see cref="string"/> or <see cref="Guid"/>.</typeparam>
 /// <typeparam name="TRecord">The data model to use for adding, updating and retrieving data from storage.</typeparam>
 #pragma warning disable CA1711 // Identifiers should not have incorrect suffix
-public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TRecord>, IKeywordHybridSearchable<TRecord>
+public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TRecord>
     where TKey : notnull
     where TRecord : class
 #pragma warning restore CA1711 // Identifiers should not have incorrect suffix
@@ -34,47 +31,45 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
     /// <summary>The default options for vector search.</summary>
     private static readonly VectorSearchOptions<TRecord> s_defaultVectorSearchOptions = new();
 
-    /// <summary>The default options for hybrid vector search.</summary>
-    private static readonly HybridSearchOptions<TRecord> s_defaultKeywordVectorizedHybridSearchOptions = new();
-
     /// <summary>The name of the upsert operation for telemetry purposes.</summary>
     private const string UpsertName = "Upsert";
 
     /// <summary>The name of the Delete operation for telemetry purposes.</summary>
     private const string DeleteName = "Delete";
 
-    /// <summary>Qdrant client that can be used to manage the collections and points in a Qdrant store.</summary>
-    private readonly MockableChromaClient _qdrantClient;
+    /// <summary>Chroma client that can be used to manage the collections and records in a Chroma store.</summary>
+    private readonly MockableChromaClient _chromaClient;
 
     /// <summary>The model for this collection.</summary>
     private readonly CollectionModel _model;
 
-    /// <summary>A mapper to use for converting between qdrant point and consumer models.</summary>
+    /// <summary>A mapper to use for converting between Chroma records and consumer models.</summary>
     private readonly ChromaMapper<TRecord> _mapper;
 
-    /// <summary>Whether the vectors in the store are named and multiple vectors are supported, or whether there is just a single unnamed vector per qdrant point.</summary>
-    private readonly bool _hasNamedVectors;
+    /// <summary>The Chroma collection, once it has been read or created.</summary>
+    private ChromaCollection? _chromaCollection;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ChromaCollection{TKey, TRecord}"/> class.
     /// </summary>
-    /// <param name="qdrantClient">Qdrant client that can be used to manage the collections and points in a Qdrant store.</param>
+    /// <param name="chromaOptions">The options used to connect to Chroma.</param>
+    /// <param name="httpClient">The <see cref="HttpClient"/> used to send the requests to Chroma.</param>
     /// <param name="name">The name of the collection that this <see cref="ChromaCollection{TKey, TRecord}"/> will access.</param>
-    /// <param name="ownsClient">A value indicating whether <paramref name="qdrantClient"/> is disposed when the collection is disposed.</param>
+    /// <param name="ownsClient">A value indicating whether <paramref name="httpClient"/> is disposed when the collection is disposed.</param>
     /// <param name="options">Optional configuration options for this class.</param>
-    /// <exception cref="ArgumentNullException">Thrown if the <paramref name="qdrantClient"/> is null.</exception>
+    /// <exception cref="ArgumentNullException">Thrown if <paramref name="chromaOptions"/> or <paramref name="httpClient"/> is null.</exception>
     /// <exception cref="ArgumentException">Thrown for any misconfigured options.</exception>
     [RequiresDynamicCode("This constructor is incompatible with NativeAOT. For dynamic mapping via Dictionary<string, object?>, instantiate ChromaDynamicCollection instead.")]
     [RequiresUnreferencedCode("This constructor is incompatible with trimming. For dynamic mapping via Dictionary<string, object?>, instantiate ChromaDynamicCollection instead")]
-    public ChromaCollection(QdrantClient qdrantClient, string name, bool ownsClient, ChromaCollectionOptions? options = null)
-        : this(() => new MockableChromaClient(qdrantClient, ownsClient), name, options)
+    public ChromaCollection(ChromaConfigurationOptions chromaOptions, HttpClient httpClient, string name, bool ownsClient, ChromaCollectionOptions? options = null)
+        : this(() => new MockableChromaClient(chromaOptions, httpClient, ownsClient), name, options)
     {
     }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ChromaCollection{TKey, TRecord}"/> class.
     /// </summary>
-    /// <param name="clientFactory">Qdrant client factory.</param>
+    /// <param name="clientFactory">Chroma client factory.</param>
     /// <param name="name">The name of the collection that this <see cref="ChromaCollection{TKey, TRecord}"/> will access.</param>
     /// <param name="options">Optional configuration options for this class.</param>
     /// <exception cref="ArgumentNullException">Thrown if the <paramref name="clientFactory"/> is null.</exception>
@@ -87,7 +82,7 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
             name,
             static options => typeof(TRecord) == typeof(Dictionary<string, object?>)
                 ? throw new NotSupportedException(VectorDataStrings.NonDynamicCollectionWithDictionaryNotSupported(typeof(ChromaDynamicCollection)))
-                : new ChromaModelBuilder(options.HasNamedVectors).Build(typeof(TRecord), typeof(TKey), options.Definition, options.EmbeddingGenerator),
+                : new ChromaModelBuilder().Build(typeof(TRecord), typeof(TKey), options.Definition, options.EmbeddingGenerator),
             options)
     {
     }
@@ -98,9 +93,9 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
         Throw.IfNull(clientFactory);
         Throw.IfNullOrWhitespace(name);
 
-        if (typeof(TKey) != typeof(ulong) && typeof(TKey) != typeof(Guid) && typeof(TKey) != typeof(object))
+        if (typeof(TKey) != typeof(string) && typeof(TKey) != typeof(Guid) && typeof(TKey) != typeof(object))
         {
-            throw new NotSupportedException("Only ulong and Guid keys are supported.");
+            throw new NotSupportedException("Only string and Guid keys are supported.");
         }
 
         options ??= ChromaCollectionOptions.Default;
@@ -108,9 +103,7 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
         // Assign.
         Name = name;
         _model = modelFactory(options);
-
-        _hasNamedVectors = options.HasNamedVectors;
-        _mapper = new ChromaMapper<TRecord>(_model, options.HasNamedVectors);
+        _mapper = new ChromaMapper<TRecord>(_model);
 
         _collectionMetadata = new()
         {
@@ -120,13 +113,13 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
 
         // The code above can throw, so we need to create the client after the model is built and verified.
         // In case an exception is thrown, we don't need to dispose any resources.
-        _qdrantClient = clientFactory();
+        _chromaClient = clientFactory();
     }
 
     /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
-        _qdrantClient.Dispose();
+        _chromaClient.Dispose();
         base.Dispose(disposing);
     }
 
@@ -135,108 +128,24 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
 
     /// <inheritdoc />
     public override Task<bool> CollectionExistsAsync(CancellationToken cancellationToken = default)
-    {
-        return RunOperationAsync(
+        => RunOperationAsync(
             "CollectionExists",
-            () => _qdrantClient.CollectionExistsAsync(Name, cancellationToken));
-    }
+            () => _chromaClient.CollectionExistsAsync(Name, cancellationToken));
 
     /// <inheritdoc />
     public override async Task EnsureCollectionExistsAsync(CancellationToken cancellationToken = default)
     {
-        // Don't even try to create if the collection already exists.
-        if (await CollectionExistsAsync(cancellationToken).ConfigureAwait(false))
+        // Chroma indexes every metadata field for filtering; full-text search is on documents only.
+        if (_model.DataProperties.FirstOrDefault(p => p.IsFullTextIndexed) is { } fullTextProperty)
         {
-            return;
+            throw new NotSupportedException($"Property {nameof(VectorStoreDataProperty.IsFullTextIndexed)} on {nameof(VectorStoreDataProperty)} '{fullTextProperty.ModelName}' is set to true, but the Chroma VectorStore does not support full-text search on data properties.");
         }
 
-        try
-        {
-            if (!_hasNamedVectors)
-            {
-                // If we are not using named vectors, we can only have one vector property. We can assume we have exactly one, since this is already verified in the constructor.
-                var singleVectorProperty = _model.VectorProperty;
+        var metadata = ChromaCollectionCreateMapping.MapCollectionMetadata(_model.VectorProperty);
 
-                // Map the single vector property to the qdrant config.
-                var vectorParams = ChromaCollectionCreateMapping.MapSingleVector(singleVectorProperty!);
-
-                // Create the collection with the single unnamed vector.
-                await _qdrantClient.CreateCollectionAsync(
-                    Name,
-                    vectorParams,
-                    cancellationToken: cancellationToken).ConfigureAwait(false);
-            }
-            else
-            {
-                // Since we are using named vectors, iterate over all vector properties.
-                var vectorProperties = _model.VectorProperties;
-
-                // Map the named vectors to the qdrant config.
-                var vectorParamsMap = ChromaCollectionCreateMapping.MapNamedVectors(vectorProperties);
-
-                // Create the collection with named vectors.
-                await _qdrantClient.CreateCollectionAsync(
-                    Name,
-                    vectorParamsMap,
-                    cancellationToken: cancellationToken).ConfigureAwait(false);
-            }
-
-            // Add indexes for each of the data properties that require filtering.
-            var dataProperties = _model.DataProperties.Where(x => x.IsIndexed);
-            foreach (var dataProperty in dataProperties)
-            {
-                // Note that the schema type doesn't distinguish between array and scalar type (so PayloadSchemaType.Integer is used for both integer and array of integers)
-                if (ChromaCollectionCreateMapping.s_schemaTypeMap.TryGetValue(dataProperty.Type, out PayloadSchemaType schemaType)
-                    || dataProperty.Type.IsArray
-                        && ChromaCollectionCreateMapping.s_schemaTypeMap.TryGetValue(dataProperty.Type.GetElementType()!, out schemaType)
-                    || dataProperty.Type.IsGenericType
-                        && dataProperty.Type.GetGenericTypeDefinition() == typeof(List<>)
-                        && ChromaCollectionCreateMapping.s_schemaTypeMap.TryGetValue(dataProperty.Type.GenericTypeArguments[0], out schemaType))
-                {
-                    await _qdrantClient.CreatePayloadIndexAsync(
-                        Name,
-                        dataProperty.StorageName,
-                        schemaType,
-                        cancellationToken: cancellationToken).ConfigureAwait(false);
-                }
-                else
-                {
-                    // TODO: This should move to model validation
-                    throw new InvalidOperationException($"Property {nameof(VectorStoreDataProperty.IsIndexed)} on {nameof(VectorStoreDataProperty)} '{dataProperty.ModelName}' is set to true, but the property type {dataProperty.Type.Name} is not supported for filtering. The Qdrant VectorStore supports filtering on {string.Join(", ", ChromaCollectionCreateMapping.s_schemaTypeMap.Keys.Select(x => x.Name))} properties only.");
-                }
-            }
-
-            // Add indexes for each of the data properties that require full text search.
-            dataProperties = _model.DataProperties.Where(x => x.IsFullTextIndexed);
-            foreach (var dataProperty in dataProperties)
-            {
-                // TODO: This should move to model validation
-                if (dataProperty.Type != typeof(string))
-                {
-                    throw new InvalidOperationException($"Property {nameof(dataProperty.IsFullTextIndexed)} on {nameof(VectorStoreDataProperty)} '{dataProperty.ModelName}' is set to true, but the property type is not a string. The Qdrant VectorStore supports {nameof(dataProperty.IsFullTextIndexed)} on string properties only.");
-                }
-
-                await _qdrantClient.CreatePayloadIndexAsync(
-                    Name,
-                    dataProperty.StorageName,
-                    PayloadSchemaType.Text,
-                    cancellationToken: cancellationToken).ConfigureAwait(false);
-            }
-        }
-        catch (RpcException ex) when (ex.StatusCode == StatusCode.AlreadyExists)
-        {
-            // Do nothing, since the collection is already created.
-        }
-        catch (RpcException ex)
-        {
-            throw new VectorStoreException("Call to vector store failed.", ex)
-            {
-                VectorStoreSystemName = ChromaConstants.VectorStoreSystemName,
-                VectorStoreName = _collectionMetadata.VectorStoreName,
-                CollectionName = Name,
-                OperationName = "EnsureCollectionExists"
-            };
-        }
+        _chromaCollection = await RunOperationAsync(
+            "EnsureCollectionExists",
+            () => _chromaClient.GetOrCreateCollectionAsync(Name, metadata, cancellationToken)).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -244,21 +153,11 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
         => RunOperationAsync("DeleteCollection",
             async () =>
             {
-                try
-                {
-                    await _qdrantClient.DeleteCollectionAsync(Name, null, cancellationToken).ConfigureAwait(false);
-                }
-                catch (QdrantException)
-                {
-                    // There is no reliable way to check if the operation failed because the
-                    // collection does not exist based on the exception itself.
-                    // So we just check here if it exists, and if not, ignore the exception.
-                    if (!await CollectionExistsAsync(cancellationToken).ConfigureAwait(false))
-                    {
-                        return;
-                    }
+                _chromaCollection = null;
 
-                    throw;
+                if (await _chromaClient.CollectionExistsAsync(Name, cancellationToken).ConfigureAwait(false))
+                {
+                    await _chromaClient.DeleteCollectionAsync(Name, cancellationToken).ConfigureAwait(false);
                 }
             });
 
@@ -267,8 +166,8 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
     {
         Throw.IfNull(key);
 
-        var retrievedPoints = await GetAsync([key], options, cancellationToken).ToListAsync(cancellationToken).ConfigureAwait(false);
-        return retrievedPoints.FirstOrDefault();
+        var records = await GetAsync([key], options, cancellationToken).ToListAsync(cancellationToken).ConfigureAwait(false);
+        return records.FirstOrDefault();
     }
 
     /// <inheritdoc />
@@ -277,42 +176,14 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
         RecordRetrievalOptions? options = default,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        const string OperationName = "Retrieve";
+        const string OperationName = "Get";
 
         Throw.IfNull(keys);
 
-        // Create options.
-        var pointsIds = new List<PointId>();
-
-        Type? keyType = null;
-
-        foreach (var key in keys)
+        var ids = keys.Select(key => ChromaMapper<TRecord>.ToId(key)).ToList();
+        if (ids.Count == 0)
         {
-            switch (key)
-            {
-                case ulong id:
-                    if (keyType == typeof(Guid))
-                    {
-                        throw new NotSupportedException("Mixing ulong and Guid keys is not supported");
-                    }
-
-                    keyType = typeof(ulong);
-                    pointsIds.Add(new PointId { Num = id });
-                    break;
-
-                case Guid id:
-                    if (keyType == typeof(ulong))
-                    {
-                        throw new NotSupportedException("Mixing ulong and Guid keys is not supported");
-                    }
-
-                    pointsIds.Add(new PointId { Uuid = id.ToString("D") });
-                    keyType = typeof(Guid);
-                    break;
-
-                default:
-                    throw new NotSupportedException($"The provided key type '{key.GetType().Name}' is not supported by Qdrant.");
-            }
+            yield break;
         }
 
         var includeVectors = options?.IncludeVectors ?? false;
@@ -321,15 +192,20 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
             throw new NotSupportedException(VectorDataStrings.IncludeVectorsNotSupportedWithEmbeddingGeneration);
         }
 
-        // Retrieve data points.
-        var retrievedPoints = await RunOperationAsync(
+        var entries = await RunOperationAsync(
             OperationName,
-            () => _qdrantClient.RetrieveAsync(Name, pointsIds, true, includeVectors, cancellationToken: cancellationToken)).ConfigureAwait(false);
+            async () => await _chromaClient.GetAsync(
+                await GetChromaCollectionAsync(cancellationToken).ConfigureAwait(false),
+                ids,
+                where: null,
+                limit: null,
+                offset: null,
+                GetInclude(includeVectors),
+                cancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
 
-        // Convert the retrieved points to the target data model.
-        foreach (var retrievedPoint in retrievedPoints)
+        foreach (var entry in entries)
         {
-            yield return _mapper.MapFromStorageToDataModel(retrievedPoint.Id, retrievedPoint.Payload, retrievedPoint.Vectors, includeVectors);
+            yield return _mapper.MapFromStorageToDataModel(entry.Id, entry.Embeddings, entry.Metadata, includeVectors);
         }
     }
 
@@ -338,14 +214,7 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
     {
         Throw.IfNull(key);
 
-        return RunOperationAsync(
-            DeleteName,
-            () => key switch
-            {
-                ulong id => _qdrantClient.DeleteAsync(Name, id, wait: true, cancellationToken: cancellationToken),
-                Guid id => _qdrantClient.DeleteAsync(Name, id, wait: true, cancellationToken: cancellationToken),
-                _ => throw new NotSupportedException($"The provided key type '{key.GetType().Name}' is not supported by Qdrant.")
-            });
+        return DeleteAsync([key], cancellationToken);
     }
 
     /// <inheritdoc />
@@ -353,94 +222,18 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
     {
         Throw.IfNull(keys);
 
-        IList? keyList = null;
-
-        switch (keys)
-        {
-            case IEnumerable<ulong> k:
-                keyList = k.ToList();
-                break;
-
-            case IEnumerable<Guid> k:
-                keyList = k.ToList();
-                break;
-
-            case IEnumerable<object> objectKeys:
-            {
-                // We need to cast the keys to a list of the same type as the first element.
-                List<Guid>? guidKeys = null;
-                List<ulong>? ulongKeys = null;
-
-                var isFirst = true;
-                foreach (var key in objectKeys)
-                {
-                    if (isFirst)
-                    {
-                        switch (key)
-                        {
-                            case ulong l:
-                                ulongKeys = [l];
-                                keyList = ulongKeys;
-                                break;
-
-                            case Guid g:
-                                guidKeys = [g];
-                                keyList = guidKeys;
-                                break;
-
-                            default:
-                                throw new NotSupportedException($"The provided key type '{key.GetType().Name}' is not supported by Qdrant.");
-                        }
-
-                        isFirst = false;
-                        continue;
-                    }
-
-                    switch (key)
-                    {
-                        case ulong u when ulongKeys is not null:
-                            ulongKeys.Add(u);
-                            continue;
-
-                        case Guid g when guidKeys is not null:
-                            guidKeys.Add(g);
-                            continue;
-
-                        case Guid or ulong:
-                            throw new NotSupportedException("Mixing ulong and Guid keys is not supported");
-
-                        default:
-                            throw new NotSupportedException($"The provided key type '{key.GetType().Name}' is not supported by Qdrant.");
-                    }
-                }
-
-                break;
-            }
-        }
-
-        if (keyList is { Count: 0 })
+        var ids = keys.Select(key => ChromaMapper<TRecord>.ToId(key)).ToList();
+        if (ids.Count == 0)
         {
             return Task.CompletedTask;
         }
 
         return RunOperationAsync(
             DeleteName,
-            () => keyList switch
-            {
-                List<ulong> keysList => _qdrantClient.DeleteAsync(
-                    Name,
-                    keysList,
-                    wait: true,
-                    cancellationToken: cancellationToken),
-
-                List<Guid> keysList => _qdrantClient.DeleteAsync(
-                    Name,
-                    keysList,
-                    wait: true,
-                    cancellationToken: cancellationToken),
-
-                _ => throw new UnreachableException()
-            });
+            async () => await _chromaClient.DeleteAsync(
+                await GetChromaCollectionAsync(cancellationToken).ConfigureAwait(false),
+                ids,
+                cancellationToken).ConfigureAwait(false));
     }
 
     /// <inheritdoc />
@@ -456,45 +249,30 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
     {
         Throw.IfNull(records);
 
-        IReadOnlyList<TRecord>? recordsList = null;
-
-        // If an embedding generator is defined, invoke it once per property for all records.
         GeneratedEmbeddings<Embedding<float>>?[]? generatedEmbeddings = null;
 
-        var vectorPropertyCount = _model.VectorProperties.Count;
-        for (var i = 0; i < vectorPropertyCount; i++)
+        var vectorProperty = _model.VectorProperty;
+        if (!ChromaModelBuilder.IsVectorPropertyTypeValidCore(vectorProperty.Type, out _))
         {
-            var vectorProperty = _model.VectorProperties[i];
-
-            if (ChromaModelBuilder.IsVectorPropertyTypeValidCore(vectorProperty.Type, out _))
-            {
-                continue;
-            }
-
-            // We have a vector property whose type isn't natively supported - we need to generate embeddings.
+            // The vector property's type isn't natively supported - we need to generate embeddings.
             Debug.Assert(vectorProperty.EmbeddingGenerator is not null);
 
-            if (recordsList is null)
+            var recordsList = records is IReadOnlyList<TRecord> r ? r : records.ToList();
+            if (recordsList.Count == 0)
             {
-                recordsList = records is IReadOnlyList<TRecord> r ? r : records.ToList();
-
-                if (recordsList.Count == 0)
-                {
-                    return;
-                }
-
-                records = recordsList;
+                return;
             }
 
-            // TODO: Ideally we'd group together vector properties using the same generator (and with the same input and output properties),
-            // and generate embeddings for them in a single batch. That's some more complexity though.
-            generatedEmbeddings ??= new GeneratedEmbeddings<Embedding<float>>?[vectorPropertyCount];
-            generatedEmbeddings[i] = (GeneratedEmbeddings<Embedding<float>>)await vectorProperty.GenerateEmbeddingsAsync(records.Select(r => vectorProperty.GetValueAsObject(r)), cancellationToken).ConfigureAwait(false);
+            records = recordsList;
+            generatedEmbeddings = [(GeneratedEmbeddings<Embedding<float>>)await vectorProperty.GenerateEmbeddingsAsync(records.Select(r => vectorProperty.GetValueAsObject(r)), cancellationToken).ConfigureAwait(false)];
         }
 
-        // Create points from records.
+        // Create the Chroma records.
         var keyProperty = _model.KeyProperty;
-        var pointStructs = new List<PointStruct>();
+        var ids = new List<string>();
+        var embeddings = new List<ReadOnlyMemory<float>>();
+        var metadatas = new List<Dictionary<string, object>>();
+        var hasMetadata = false;
         var recordIndex = 0;
         foreach (var record in records)
         {
@@ -503,18 +281,26 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
                 keyProperty.SetValue(record, Guid.NewGuid());
             }
 
-            pointStructs.Add(_mapper.MapFromDataToStorageModel(record, recordIndex++, generatedEmbeddings));
+            var storageRecord = _mapper.MapFromDataToStorageModel(record, recordIndex++, generatedEmbeddings);
+            ids.Add(storageRecord.Id);
+            embeddings.Add(storageRecord.Embedding);
+            metadatas.Add(storageRecord.Metadata!);
+            hasMetadata |= storageRecord.Metadata is not null;
         }
 
-        if (pointStructs.Count == 0)
+        if (ids.Count == 0)
         {
             return;
         }
 
-        // Upsert.
         await RunOperationAsync(
             UpsertName,
-            () => _qdrantClient.UpsertAsync(Name, pointStructs, true, cancellationToken: cancellationToken)).ConfigureAwait(false);
+            async () => await _chromaClient.UpsertAsync(
+                await GetChromaCollectionAsync(cancellationToken).ConfigureAwait(false),
+                ids,
+                embeddings,
+                hasMetadata ? metadatas : null,
+                cancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
     }
 
     #region Search
@@ -536,57 +322,48 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
         }
 
         var vectorProperty = _model.GetVectorPropertyOrSingle(options);
-        var vectorArray = await GetSearchVectorArrayAsync(searchValue, vectorProperty, cancellationToken).ConfigureAwait(false);
+        var vector = await GetSearchVectorAsync(searchValue, vectorProperty, cancellationToken).ConfigureAwait(false);
 
-        // Build filter object.
-        var filter = options.Filter is not null
+        var where = options.Filter is not null
             ? new ChromaFilterTranslator().Translate(options.Filter, _model)
-            : new Filter();
+            : null;
 
-        // Specify whether to include vectors in the search results.
-        var vectorsSelector = new WithVectorsSelector { Enable = options.IncludeVectors };
-        var query = new Query { Nearest = new VectorInput(vectorArray) };
-
-        // Execute Search.
-        var points = await RunOperationAsync(
-            "Query",
-            () => _qdrantClient.QueryAsync(
-                Name,
-                query: query,
-                usingVector: _hasNamedVectors ? vectorProperty.StorageName : null,
-                filter: filter,
-                scoreThreshold: (float?)options.ScoreThreshold,
-                limit: (ulong)top,
-                offset: (ulong)options.Skip,
-                vectorsSelector: vectorsSelector,
-                cancellationToken: cancellationToken)).ConfigureAwait(false);
-
-        // Map to data model.
-        var mappedResults = points.Select(point => ChromaCollectionSearchMapping.MapScoredPointToVectorSearchResult(
-                point,
-                _mapper,
-                options.IncludeVectors,
-                ChromaConstants.VectorStoreSystemName,
-                _collectionMetadata.VectorStoreName,
-                Name,
-                "Query"));
-
-        foreach (var result in mappedResults)
+        var include = ChromaQueryInclude.Metadatas | ChromaQueryInclude.Distances;
+        if (options.IncludeVectors)
         {
-            yield return result;
+            include |= ChromaQueryInclude.Embeddings;
+        }
+
+        // Chroma has no offset in queries: ask for the skipped records too, and drop them here.
+        var entries = await RunOperationAsync(
+            "Query",
+            async () => await _chromaClient.QueryAsync(
+                await GetChromaCollectionAsync(cancellationToken).ConfigureAwait(false),
+                vector,
+                top + options.Skip,
+                where,
+                include,
+                cancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+
+        foreach (var entry in entries.Skip(options.Skip))
+        {
+            var score = ChromaCollectionSearchMapping.ToScore(entry.Distance!.Value, vectorProperty.DistanceFunction);
+            if (!ChromaCollectionSearchMapping.PassesThreshold(score, options.ScoreThreshold, vectorProperty.DistanceFunction))
+            {
+                continue;
+            }
+
+            yield return new VectorSearchResult<TRecord>(
+                _mapper.MapFromStorageToDataModel(entry.Id, entry.Embeddings, entry.Metadata, options.IncludeVectors),
+                score);
         }
     }
 
-    private static async ValueTask<float[]> GetSearchVectorArrayAsync<TInput>(TInput searchValue, VectorPropertyModel vectorProperty, CancellationToken cancellationToken)
+    private static async ValueTask<ReadOnlyMemory<float>> GetSearchVectorAsync<TInput>(TInput searchValue, VectorPropertyModel vectorProperty, CancellationToken cancellationToken)
         where TInput : notnull
-    {
-        if (searchValue is float[] array)
+        => searchValue switch
         {
-            return array;
-        }
-
-        var memory = searchValue switch
-        {
+            float[] array => array,
             ReadOnlyMemory<float> r => r,
             Embedding<float> e => e.Vector,
             _ when vectorProperty.EmbeddingGenerationDispatcher is not null
@@ -596,11 +373,6 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
                 ? throw new NotSupportedException(VectorDataStrings.InvalidSearchInputAndNoEmbeddingGeneratorWasConfigured(searchValue.GetType(), ChromaModelBuilder.SupportedVectorTypes))
                 : throw new InvalidOperationException(VectorDataStrings.IncompatibleEmbeddingGeneratorWasConfiguredForInputType(typeof(TInput), vectorProperty.EmbeddingGenerator.GetType()))
         };
-
-        return MemoryMarshal.TryGetArray(memory, out ArraySegment<float> segment) && segment.Count == segment.Array!.Length
-                ? segment.Array
-                : memory.ToArray();
-    }
 
     #endregion Search
 
@@ -613,131 +385,27 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
 
         options ??= new();
 
-        var translatedFilter = new ChromaFilterTranslator().Translate(filter, _model);
-
-        // Specify whether to include vectors in the search results.
-        WithVectorsSelector vectorsSelector = new() { Enable = options.IncludeVectors };
-
-        var orderByValues = options.OrderBy?.Invoke(new()).Values;
-        var sortInfo = orderByValues switch
+        if (options.OrderBy?.Invoke(new()).Values is { Count: > 0 })
         {
-            null => null,
-            _ when orderByValues.Count == 1 => orderByValues[0],
-            _ => throw new NotSupportedException("Qdrant does not support ordering by more than one property.")
-        };
-
-        OrderBy? orderBy = null;
-        if (sortInfo is not null)
-        {
-            var orderByName = _model.GetDataOrKeyProperty(sortInfo.PropertySelector).StorageName;
-            orderBy = new(orderByName)
-            {
-                Direction = sortInfo.Ascending ? global::Qdrant.Client.Grpc.Direction.Asc : global::Qdrant.Client.Grpc.Direction.Desc
-            };
+            throw new NotSupportedException("Chroma does not support ordering.");
         }
 
-        var scrollResponse = await RunOperationAsync(
-            "Scroll",
-            () => _qdrantClient.ScrollAsync(
-                Name,
-                translatedFilter,
-                vectorsSelector,
-                limit: (uint)(top + options.Skip),
-                orderBy,
-                cancellationToken: cancellationToken)).ConfigureAwait(false);
+        var where = new ChromaFilterTranslator().Translate(filter, _model);
 
-        var mappedResults = scrollResponse.Result.Skip(options.Skip).Select(point => ChromaCollectionSearchMapping.MapRetrievedPointToRecord(
-                point,
-                _mapper,
-                options.IncludeVectors,
-                ChromaConstants.VectorStoreSystemName,
-                _collectionMetadata.VectorStoreName,
-                Name,
-                "Scroll"));
+        var entries = await RunOperationAsync(
+            "Get",
+            async () => await _chromaClient.GetAsync(
+                await GetChromaCollectionAsync(cancellationToken).ConfigureAwait(false),
+                ids: null,
+                where,
+                limit: top,
+                offset: options.Skip,
+                GetInclude(options.IncludeVectors),
+                cancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
 
-        foreach (var mappedResult in mappedResults)
+        foreach (var entry in entries)
         {
-            yield return mappedResult;
-        }
-    }
-
-    /// <inheritdoc />
-    public async IAsyncEnumerable<VectorSearchResult<TRecord>> HybridSearchAsync<TInput>(TInput searchValue, ICollection<string> keywords, int top, HybridSearchOptions<TRecord>? options = null, [EnumeratorCancellation] CancellationToken cancellationToken = default)
-        where TInput : notnull
-    {
-        Throw.IfLessThan(top, 1);
-
-        // Resolve options.
-        options ??= s_defaultKeywordVectorizedHybridSearchOptions;
-        var vectorProperty = _model.GetVectorPropertyOrSingle<TRecord>(new() { VectorProperty = options.VectorProperty });
-        var vectorArray = await GetSearchVectorArrayAsync(searchValue, vectorProperty, cancellationToken).ConfigureAwait(false);
-        var textDataProperty = _model.GetFullTextDataPropertyOrSingle(options.AdditionalProperty);
-
-        // Build filter object.
-        var filter = options.Filter is not null
-            ? new ChromaFilterTranslator().Translate(options.Filter, _model)
-            : new Filter();
-
-        // Specify whether to include vectors in the search results.
-        var vectorsSelector = new WithVectorsSelector { Enable = options.IncludeVectors };
-
-        // Build the vector query.
-        var vectorQuery = new PrefetchQuery
-        {
-            Filter = filter,
-            Query = new Query { Nearest = new VectorInput(vectorArray) }
-        };
-
-        if (_hasNamedVectors)
-        {
-            vectorQuery.Using = _hasNamedVectors ? vectorProperty.StorageName : null;
-        }
-
-        // Build the keyword query.
-        var keywordFilter = filter.Clone();
-        var keywordSubFilter = new Filter();
-        foreach (string keyword in keywords)
-        {
-            keywordSubFilter.Should.Add(new Condition() { Field = new FieldCondition() { Key = textDataProperty.StorageName, Match = new Match { Text = keyword } } });
-        }
-        keywordFilter.Must.Add(new Condition() { Filter = keywordSubFilter });
-        var keywordQuery = new PrefetchQuery
-        {
-            Filter = keywordFilter,
-        };
-
-        // Build the fusion query.
-        var fusionQuery = new Query
-        {
-            Fusion = Fusion.Rrf,
-        };
-
-        // Execute Search.
-        var points = await RunOperationAsync(
-            "Query",
-            () => _qdrantClient.QueryAsync(
-                Name,
-                prefetch: [vectorQuery, keywordQuery],
-                query: fusionQuery,
-                scoreThreshold: (float?)options.ScoreThreshold,
-                limit: (ulong)top,
-                offset: (ulong)options.Skip,
-                vectorsSelector: vectorsSelector,
-                cancellationToken: cancellationToken)).ConfigureAwait(false);
-
-        // Map to data model.
-        var mappedResults = points.Select(point => ChromaCollectionSearchMapping.MapScoredPointToVectorSearchResult(
-                point,
-                _mapper,
-                options.IncludeVectors,
-                ChromaConstants.VectorStoreSystemName,
-                _collectionMetadata.VectorStoreName,
-                Name,
-                "Query"));
-
-        foreach (var result in mappedResults)
-        {
-            yield return result;
+            yield return _mapper.MapFromStorageToDataModel(entry.Id, entry.Embeddings, entry.Metadata, options.IncludeVectors);
         }
     }
 
@@ -749,33 +417,44 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
         return
             serviceKey is not null ? null :
             serviceType == typeof(VectorStoreCollectionMetadata) ? _collectionMetadata :
-            serviceType == typeof(QdrantClient) ? _qdrantClient.QdrantClient :
+            serviceType == typeof(ChromaClient) ? _chromaClient.ChromaClient :
             serviceType.IsInstanceOfType(this) ? this :
             null;
     }
 
+    private static ChromaGetInclude GetInclude(bool includeVectors)
+        => includeVectors
+            ? ChromaGetInclude.Metadatas | ChromaGetInclude.Embeddings
+            : ChromaGetInclude.Metadatas;
+
     /// <summary>
-    /// Run the given operation and wrap any <see cref="RpcException"/> with <see cref="VectorStoreException"/>."/>
+    /// Get the Chroma collection, reading it the first time; record operations need its id.
+    /// </summary>
+    private async Task<ChromaCollection> GetChromaCollectionAsync(CancellationToken cancellationToken)
+        => _chromaCollection ??= await _chromaClient.GetCollectionAsync(Name, cancellationToken).ConfigureAwait(false);
+
+    /// <summary>
+    /// Run the given operation and wrap any <see cref="ChromaException"/> or <see cref="HttpRequestException"/> with <see cref="VectorStoreException"/>.
     /// </summary>
     /// <param name="operationName">The type of database operation being run.</param>
     /// <param name="operation">The operation to run.</param>
     /// <returns>The result of the operation.</returns>
     private Task RunOperationAsync(string operationName, Func<Task> operation)
-        => VectorStoreErrorHandler.RunOperationAsync<RpcException>(
+        => VectorStoreErrorHandler.RunOperationAsync<HttpRequestException>(
             _collectionMetadata,
             operationName,
-            operation);
+            () => VectorStoreErrorHandler.RunOperationAsync<ChromaException>(_collectionMetadata, operationName, operation));
 
     /// <summary>
-    /// Run the given operation and wrap any <see cref="RpcException"/> with <see cref="VectorStoreException"/>."/>
+    /// Run the given operation and wrap any <see cref="ChromaException"/> or <see cref="HttpRequestException"/> with <see cref="VectorStoreException"/>.
     /// </summary>
     /// <typeparam name="T">The response type of the operation.</typeparam>
     /// <param name="operationName">The type of database operation being run.</param>
     /// <param name="operation">The operation to run.</param>
     /// <returns>The result of the operation.</returns>
     private Task<T> RunOperationAsync<T>(string operationName, Func<Task<T>> operation)
-        => VectorStoreErrorHandler.RunOperationAsync<T, RpcException>(
+        => VectorStoreErrorHandler.RunOperationAsync<T, HttpRequestException>(
             _collectionMetadata,
             operationName,
-            operation);
+            () => VectorStoreErrorHandler.RunOperationAsync<T, ChromaException>(_collectionMetadata, operationName, operation));
 }
