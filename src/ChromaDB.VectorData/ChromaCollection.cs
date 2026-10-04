@@ -141,11 +141,11 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
             throw new NotSupportedException($"Property {nameof(VectorStoreDataProperty.IsFullTextIndexed)} on {nameof(VectorStoreDataProperty)} '{fullTextProperty.ModelName}' is set to true, but the Chroma VectorStore does not support full-text search on data properties.");
         }
 
-        var metadata = ChromaCollectionCreateMapping.MapCollectionMetadata(_model.VectorProperty);
+        var definition = ChromaCollectionCreateMapping.MapCollectionDefinition(Name, _model.VectorProperty);
 
         _chromaCollection = await RunOperationAsync(
             "EnsureCollectionExists",
-            () => _chromaClient.GetOrCreateCollectionAsync(Name, metadata, cancellationToken)).ConfigureAwait(false);
+            () => _chromaClient.GetOrCreateCollectionAsync(definition, cancellationToken)).ConfigureAwait(false);
     }
 
     /// <inheritdoc />

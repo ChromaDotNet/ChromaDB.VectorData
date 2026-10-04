@@ -54,17 +54,18 @@ public class ChromaCollectionTests
     {
         // Arrange.
         using var sut = this.CreateCollection<string, DotProductHotel>();
-        Dictionary<string, object>? metadata = null;
+        ChromaCollectionDefinition? definition = null;
         this._chromaClientMock
-            .Setup(x => x.GetOrCreateCollectionAsync(TestCollectionName, It.IsAny<Dictionary<string, object>?>(), this._testCancellationToken))
-            .Callback<string, Dictionary<string, object>?, CancellationToken>((_, m, _) => metadata = m)
+            .Setup(x => x.GetOrCreateCollectionAsync(It.IsAny<ChromaCollectionDefinition>(), this._testCancellationToken))
+            .Callback<ChromaCollectionDefinition, CancellationToken>((d, _) => definition = d)
             .ReturnsAsync(this._chromaCollection);
 
         // Act.
         await sut.EnsureCollectionExistsAsync(this._testCancellationToken);
 
         // Assert.
-        Assert.Equal("ip", metadata!["hnsw:space"]);
+        Assert.Equal(TestCollectionName, definition!.Name);
+        Assert.Equal(ChromaSpace.InnerProduct, definition.Configuration?.Space);
     }
 
     [Fact]
