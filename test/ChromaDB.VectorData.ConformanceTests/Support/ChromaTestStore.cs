@@ -57,8 +57,8 @@ internal sealed class ChromaTestStore : TestStore
         await this._container.StartAsync();
         this.ChromaOptions = new ChromaConfigurationOptions($"http://{this._container.Hostname}:{this._container.GetMappedPublicPort(ChromaPort)}");
         this._httpClient = new HttpClient();
-        // The client is shared, it's not owned by the vector store.
-        this.DefaultVectorStore = new ChromaVectorStore(this.ChromaOptions, this._httpClient, ownsClient: false);
+        // The vector store does not own a ChromaClient it is given; GetVectorStore covers the constructor with options.
+        this.DefaultVectorStore = new ChromaVectorStore(new ChromaClient(this.ChromaOptions, this._httpClient));
     }
 
     protected override async Task StopAsync()
