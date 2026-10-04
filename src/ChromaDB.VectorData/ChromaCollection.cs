@@ -69,6 +69,21 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
     /// <summary>
     /// Initializes a new instance of the <see cref="ChromaCollection{TKey, TRecord}"/> class.
     /// </summary>
+    /// <param name="chromaClient">The Chroma client, for example from the dependency injection container. The collection does not dispose it.</param>
+    /// <param name="name">The name of the collection that this <see cref="ChromaCollection{TKey, TRecord}"/> will access.</param>
+    /// <param name="options">Optional configuration options for this class.</param>
+    /// <exception cref="ArgumentNullException">Thrown if <paramref name="chromaClient"/> is null.</exception>
+    /// <exception cref="ArgumentException">Thrown for any misconfigured options.</exception>
+    [RequiresDynamicCode("This constructor is incompatible with NativeAOT. For dynamic mapping via Dictionary<string, object?>, instantiate ChromaDynamicCollection instead.")]
+    [RequiresUnreferencedCode("This constructor is incompatible with trimming. For dynamic mapping via Dictionary<string, object?>, instantiate ChromaDynamicCollection instead")]
+    public ChromaCollection(ChromaClient chromaClient, string name, ChromaCollectionOptions? options = null)
+        : this(() => new MockableChromaClient(chromaClient), name, options)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ChromaCollection{TKey, TRecord}"/> class.
+    /// </summary>
     /// <param name="clientFactory">Chroma client factory.</param>
     /// <param name="name">The name of the collection that this <see cref="ChromaCollection{TKey, TRecord}"/> will access.</param>
     /// <param name="options">Optional configuration options for this class.</param>

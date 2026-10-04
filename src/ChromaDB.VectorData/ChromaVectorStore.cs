@@ -45,6 +45,16 @@ public sealed class ChromaVectorStore : VectorStore
     /// <summary>
     /// Initializes a new instance of the <see cref="ChromaVectorStore"/> class.
     /// </summary>
+    /// <param name="chromaClient">The Chroma client, for example from the dependency injection container. The vector store does not dispose it.</param>
+    /// <param name="options">Optional configuration options for this class.</param>
+    public ChromaVectorStore(ChromaClient chromaClient, ChromaVectorStoreOptions? options = default)
+        : this(new MockableChromaClient(chromaClient), options)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ChromaVectorStore"/> class.
+    /// </summary>
     /// <param name="chromaClient">Chroma client that can be used to manage the collections and records in a Chroma store.</param>
     /// <param name="options">Optional configuration options for this class.</param>
     internal ChromaVectorStore(MockableChromaClient chromaClient, ChromaVectorStoreOptions? options = default)

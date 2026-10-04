@@ -1,9 +1,12 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System;
 using System.Linq;
+using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
+using ChromaDB.Client;
 using Microsoft.Extensions.VectorData;
 using Moq;
 using Xunit;
@@ -19,6 +22,52 @@ public class ChromaVectorStoreTests
 
     private readonly Mock<MockableChromaClient> _chromaClientMock = new(MockBehavior.Strict);
     private readonly CancellationToken _testCancellationToken = new(false);
+
+    [Fact]
+    public void ReadsMetadataExactlyWithTheClientOfTheCaller()
+    {
+        // Arrange.
+        using var httpClient = new HttpClient();
+        var chromaClient = new ChromaClient(new ChromaConfigurationOptions("http://localhost:8000"), httpClient);
+
+        // Act.
+        using var sut = new ChromaVectorStore(chromaClient);
+        var actual = Assert.IsType<ChromaClient>(sut.GetService(typeof(ChromaClient)));
+
+        // Assert.
+        Assert.Equal(ChromaMetadataValues.Exact, actual.Options.MetadataValues);
+        Assert.Equal(ChromaMetadataValues.Inferred, chromaClient.Options.MetadataValues);
+    }
+
+    [Fact]
+    public async Task DisposeLeavesTheHttpClientOfTheCallerAsync()
+    {
+        // Arrange.
+        var handler = new HttpMessageHandlerStub();
+        using var httpClient = new HttpClient(handler);
+        var chromaClient = new ChromaClient(new ChromaConfigurationOptions("http://localhost:8000"), httpClient);
+
+        // Act.
+        new ChromaVectorStore(chromaClient).Dispose();
+
+        // Assert.
+        using var response = await httpClient.GetAsync(new Uri("http://localhost:8000/api/v2/heartbeat"));
+        Assert.NotNull(handler.RequestUri);
+    }
+
+    [Fact]
+    public async Task DisposeDisposesAnOwnedHttpClientAsync()
+    {
+        // Arrange.
+        var handler = new HttpMessageHandlerStub();
+        using var httpClient = new HttpClient(handler);
+
+        // Act.
+        new ChromaVectorStore(new ChromaConfigurationOptions("http://localhost:8000"), httpClient, ownsClient: true).Dispose();
+
+        // Assert.
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => httpClient.GetAsync(new Uri("http://localhost:8000/api/v2/heartbeat")));
+    }
 
     [Fact]
     public void GetCollectionReturnsChromaCollection()

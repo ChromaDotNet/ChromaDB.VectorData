@@ -12,9 +12,8 @@ namespace ChromaDB.VectorData;
 /// </summary>
 internal class MockableChromaClient : IDisposable
 {
-    private readonly HttpClient _httpClient;
+    private readonly HttpClient? _ownedHttpClient;
     private readonly ChromaClient _chromaClient;
-    private readonly bool _ownsClient;
     private int _referenceCount = 1;
 
     /// <summary>
@@ -29,9 +28,20 @@ internal class MockableChromaClient : IDisposable
         Throw.IfNull(httpClient);
 
         // Strings in metadata stay strings, and lists come back as lists of values, not as JSON.
-        _httpClient = httpClient;
         _chromaClient = new ChromaClient(options.WithMetadataValues(ChromaMetadataValues.Exact), httpClient);
-        _ownsClient = ownsClient;
+        _ownedHttpClient = ownsClient ? httpClient : null;
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MockableChromaClient"/> class with a client that the caller owns.
+    /// </summary>
+    /// <param name="chromaClient">The Chroma client, for example from the dependency injection container.</param>
+    public MockableChromaClient(ChromaClient chromaClient)
+    {
+        Throw.IfNull(chromaClient);
+
+        // A client with the same HttpClient and options, which reads metadata exactly.
+        _chromaClient = chromaClient.WithMetadataValues(ChromaMetadataValues.Exact);
     }
 
 #pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
@@ -52,12 +62,9 @@ internal class MockableChromaClient : IDisposable
 
     public void Dispose()
     {
-        if (_ownsClient)
+        if (_ownedHttpClient is not null && Interlocked.Decrement(ref _referenceCount) == 0)
         {
-            if (Interlocked.Decrement(ref _referenceCount) == 0)
-            {
-                _httpClient.Dispose();
-            }
+            _ownedHttpClient.Dispose();
         }
     }
 
@@ -168,7 +175,7 @@ internal class MockableChromaClient : IDisposable
 
     internal MockableChromaClient Share()
     {
-        if (_ownsClient)
+        if (_ownedHttpClient is not null)
         {
             Interlocked.Increment(ref _referenceCount);
         }

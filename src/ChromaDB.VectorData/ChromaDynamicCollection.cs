@@ -25,6 +25,17 @@ public sealed class ChromaDynamicCollection : ChromaCollection<object, Dictionar
     {
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ChromaDynamicCollection"/> class.
+    /// </summary>
+    /// <param name="chromaClient">The Chroma client, for example from the dependency injection container. The collection does not dispose it.</param>
+    /// <param name="name">The name of the collection.</param>
+    /// <param name="options">Optional configuration options for this class.</param>
+    public ChromaDynamicCollection(ChromaClient chromaClient, string name, ChromaCollectionOptions options)
+        : this(() => new MockableChromaClient(chromaClient), name, options)
+    {
+    }
+
     internal ChromaDynamicCollection(Func<MockableChromaClient> clientFactory, string name, ChromaCollectionOptions options)
         : base(
             clientFactory,
