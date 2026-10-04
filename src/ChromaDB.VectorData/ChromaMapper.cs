@@ -93,14 +93,16 @@ internal sealed class ChromaMapper<TRecord>(CollectionModel model)
                 });
         }
 
-        if (metadata is not null)
+        foreach (var dataProperty in model.DataProperties)
         {
-            foreach (var dataProperty in model.DataProperties)
+            if (metadata is not null && metadata.TryGetValue(dataProperty.StorageName, out var value))
             {
-                if (metadata.TryGetValue(dataProperty.StorageName, out var value))
-                {
-                    dataProperty.SetValueAsObject(outputRecord, ChromaFieldMapping.FromMetadataValue(value, dataProperty.Type));
-                }
+                dataProperty.SetValueAsObject(outputRecord, ChromaFieldMapping.FromMetadataValue(value, dataProperty.Type));
+            }
+            else if (!dataProperty.Type.IsValueType || Nullable.GetUnderlyingType(dataProperty.Type) is not null)
+            {
+                // A null value is not stored, since Chroma metadata has no null values; a missing one is null.
+                dataProperty.SetValueAsObject(outputRecord, null);
             }
         }
 
