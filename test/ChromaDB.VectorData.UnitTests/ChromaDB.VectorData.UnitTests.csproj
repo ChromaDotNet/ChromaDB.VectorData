@@ -29,6 +29,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Qdrant\Qdrant.csproj" />
+    <ProjectReference Include="..\..\src\ChromaDB.VectorData\ChromaDB.VectorData.csproj" />
   </ItemGroup>
 </Project>

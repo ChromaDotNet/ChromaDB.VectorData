@@ -8,11 +8,11 @@
   </Folder>
   <Folder Name="/src/">
     <File Path="src/Directory.Build.props" />
-    <Project Path="src/Qdrant/Qdrant.csproj" />
+    <Project Path="src/ChromaDB.VectorData/ChromaDB.VectorData.csproj" />
   </Folder>
   <Folder Name="/test/">
     <File Path="test/Directory.Build.props" />
-    <Project Path="test/Qdrant.UnitTests/Qdrant.UnitTests.csproj" />
-    <Project Path="test/Qdrant.ConformanceTests/Qdrant.ConformanceTests.csproj" />
+    <Project Path="test/ChromaDB.VectorData.UnitTests/ChromaDB.VectorData.UnitTests.csproj" />
+    <Project Path="test/ChromaDB.VectorData.ConformanceTests/ChromaDB.VectorData.ConformanceTests.csproj" />
   </Folder>
 </Solution>
