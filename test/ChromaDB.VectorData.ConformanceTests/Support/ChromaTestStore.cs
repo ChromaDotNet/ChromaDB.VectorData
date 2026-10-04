@@ -20,7 +20,8 @@ internal sealed class ChromaTestStore : TestStore
     // Chroma indexes vectors with HNSW only
     public override string DefaultIndexKind => IndexKind.Hnsw;
 
-    private readonly IContainer _container = new ContainerBuilder("chromadb/chroma:1.5.9")
+    // CHROMA_IMAGE runs the tests against another Chroma release, e.g. chromadb/chroma:1.5.0.
+    private readonly IContainer _container = new ContainerBuilder(Environment.GetEnvironmentVariable("CHROMA_IMAGE") ?? "chromadb/chroma:1.5.9")
         .WithPortBinding(ChromaPort, assignRandomHostPort: true)
         .WithWaitStrategy(Wait.ForUnixContainer().UntilHttpRequestIsSucceeded(request => request.ForPath("/api/v2/heartbeat").ForPort(ChromaPort)))
         .Build();
