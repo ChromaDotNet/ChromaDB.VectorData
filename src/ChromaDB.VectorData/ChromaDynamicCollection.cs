@@ -1,12 +1,12 @@
-﻿// Licensed to the .NET Foundation under one or more agreements.
+// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using Qdrant.Client;
+using ChromaDB.Client;
 
 namespace ChromaDB.VectorData;
 
 /// <summary>
-/// Represents a collection of vector store records in a Qdrant database, mapped to a dynamic <c>Dictionary&lt;string, object?&gt;</c>.
+/// Represents a collection of vector store records in a Chroma database, mapped to a dynamic <c>Dictionary&lt;string, object?&gt;</c>.
 /// </summary>
 #pragma warning disable CA1711 // Identifiers should not have incorrect suffix
 public sealed class ChromaDynamicCollection : ChromaCollection<object, Dictionary<string, object?>>
@@ -15,12 +15,13 @@ public sealed class ChromaDynamicCollection : ChromaCollection<object, Dictionar
     /// <summary>
     /// Initializes a new instance of the <see cref="ChromaDynamicCollection"/> class.
     /// </summary>
-    /// <param name="qdrantClient">Qdrant client that can be used to manage the collections and points in a Qdrant store.</param>
+    /// <param name="chromaOptions">The options used to connect to Chroma.</param>
+    /// <param name="httpClient">The <see cref="HttpClient"/> used to send the requests to Chroma.</param>
     /// <param name="name">The name of the collection.</param>
-    /// <param name="ownsClient">A value indicating whether <paramref name="qdrantClient"/> is disposed when the collection is disposed.</param>
+    /// <param name="ownsClient">A value indicating whether <paramref name="httpClient"/> is disposed when the collection is disposed.</param>
     /// <param name="options">Optional configuration options for this class.</param>
-    public ChromaDynamicCollection(QdrantClient qdrantClient, string name, bool ownsClient, ChromaCollectionOptions options)
-        : this(() => new MockableChromaClient(qdrantClient, ownsClient), name, options)
+    public ChromaDynamicCollection(ChromaConfigurationOptions chromaOptions, HttpClient httpClient, string name, bool ownsClient, ChromaCollectionOptions options)
+        : this(() => new MockableChromaClient(chromaOptions, httpClient, ownsClient), name, options)
     {
     }
 
@@ -28,7 +29,7 @@ public sealed class ChromaDynamicCollection : ChromaCollection<object, Dictionar
         : base(
             clientFactory,
             name,
-            static options => new ChromaModelBuilder(options.HasNamedVectors)
+            static options => new ChromaModelBuilder()
                 .BuildDynamic(
                     options.Definition ?? throw new ArgumentException("Definition is required for dynamic collections"),
                     options.EmbeddingGenerator),
