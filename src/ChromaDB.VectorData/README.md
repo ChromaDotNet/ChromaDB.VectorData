@@ -72,6 +72,7 @@ services.AddChromaVectorStore("http://localhost:8000");
 - Chroma metadata has no null values: a null property is not stored, and filtering on null is not supported.
 - `GetAsync` with a filter does not support ordering.
 - Comparisons work on numbers only.
+- Array properties need Chroma 1.5.0 or later.
 - Hybrid search is not supported.
 
 The provider runs the Microsoft.Extensions.VectorData conformance tests against Chroma 1.5.0, 1.5.9 and the latest release.
