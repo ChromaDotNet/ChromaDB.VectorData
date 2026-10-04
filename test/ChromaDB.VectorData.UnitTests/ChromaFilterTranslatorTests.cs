@@ -57,8 +57,32 @@ public class ChromaFilterTranslatorTests
         => Assert.Throws<NotSupportedException>(() => Translate(h => string.Compare(h.HotelName, "b", StringComparison.Ordinal) > 0));
 
     [Fact]
-    public void ThrowsForContainsOverAnArrayProperty()
-        => Assert.Throws<NotSupportedException>(() => Translate(h => h.Tags!.Contains("pool")));
+    public void TranslatesContainsOverAnArrayProperty()
+        => Assert.Equal("""{"Tags":{"$contains":"pool"}}""", Translate(h => h.Tags!.Contains("pool")));
+
+    [Fact]
+    public void TranslatesANegatedContainsOverAnArrayProperty()
+        => Assert.Equal("""{"Tags":{"$not_contains":"pool"}}""", Translate(h => !h.Tags!.Contains("pool")));
+
+    [Fact]
+    public void TranslatesAnyWithContainsToAnOrOfContains()
+        => Assert.Equal(
+            """{"$or":[{"Tags":{"$contains":"pool"}},{"Tags":{"$contains":"spa"}}]}""",
+            Translate(h => h.Tags!.Any(t => new[] { "pool", "spa" }.Contains(t))));
+
+    [Fact]
+    public void TranslatesANegatedAnyWithContainsToAnAndOfNotContains()
+        => Assert.Equal(
+            """{"$and":[{"Tags":{"$not_contains":"pool"}},{"Tags":{"$not_contains":"spa"}}]}""",
+            Translate(h => !h.Tags!.Any(t => new[] { "pool", "spa" }.Contains(t))));
+
+    [Fact]
+    public void ThrowsForAnyOverAnEmptyArray()
+        => Assert.Throws<NotSupportedException>(() => Translate(h => h.Tags!.Any(t => new string[0].Contains(t))));
+
+    [Fact]
+    public void TranslatesANegatedAnyOverAnEmptyArrayToMatchAll()
+        => Assert.Null(new ChromaFilterTranslator().Translate((Expression<Func<Hotel<string>, bool>>)(h => !h.Tags!.Any(t => new string[0].Contains(t))), s_model));
 
     [Fact]
     public void ThrowsForContainsOverAnEmptyInlineArray()

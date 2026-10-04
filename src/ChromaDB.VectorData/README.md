@@ -65,13 +65,13 @@ services.AddChromaVectorStore("http://localhost:8000");
 - One vector per record: `ReadOnlyMemory<float>`, `Embedding<float>` or `float[]`, or any type with an embedding generator.
 - Data properties: `string`, `int`, `long`, `double`, `float`, `bool`, `DateTime`, `DateTimeOffset`, `DateOnly`, and arrays or lists of these, stored as Chroma metadata; dates are stored as ISO 8601 strings.
 - Distance functions: `CosineSimilarity` (the default), `CosineDistance`, `DotProductSimilarity`, `NegativeDotProductSimilarity`, `EuclideanDistance` and `EuclideanSquaredDistance`, with the HNSW index.
-- Filters: `==` and `!=`, `<`, `<=`, `>` and `>=` on numbers, `&&`, `||`, `!`, and `Contains` over an inline list.
+- Filters: `==` and `!=`, `<`, `<=`, `>` and `>=` on numbers, `&&`, `||`, `!`, `Contains` over an inline list or an array property, and `Any` with `Contains` over an inline list.
 
 ## Limitations
 
 - Chroma metadata has no null values: a null property is not stored, and filtering on null is not supported.
 - `GetAsync` with a filter does not support ordering.
-- Filtering on whether an array property contains a value is not supported yet, and comparisons work on numbers only.
+- Comparisons work on numbers only.
 - Hybrid search is not supported.
 
 The provider runs the Microsoft.Extensions.VectorData conformance tests against Chroma 1.5.0, 1.5.9 and the latest release.

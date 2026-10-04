@@ -163,6 +163,11 @@ internal class ChromaFilterTranslator : FilterTranslatorBase
             _ when TryMatchContains(methodCall, out var source, out var item)
                 => TranslateContains(source, item, negated),
 
+            // Enumerable.Any() with a Contains predicate (r => r.Strings.Any(s => array.Contains(s)))
+            { Method.Name: nameof(Enumerable.Any), Arguments: [var anySource, LambdaExpression lambda] } any
+                when any.Method.DeclaringType == typeof(Enumerable)
+                => TranslateAny(anySource, lambda, negated),
+
             _ => throw new NotSupportedException($"Unsupported method call: {methodCall.Method.DeclaringType?.Name}.{methodCall.Method.Name}")
         };
 
@@ -171,8 +176,15 @@ internal class ChromaFilterTranslator : FilterTranslatorBase
         switch (source)
         {
             // Contains over field enumerable
-            case var _ when TryBindProperty(source, out _):
-                throw new NotSupportedException("Filtering on whether an array property contains a value is not supported yet.");
+            case var _ when TryBindProperty(source, out var property):
+                if (!TryGetConstant(item, out var value))
+                {
+                    throw new NotSupportedException("Unsupported item in Contains");
+                }
+
+                return negated
+                    ? ChromaWhereOperator.NotContains(property.StorageName, ToFilterValue(value))
+                    : ChromaWhereOperator.Contains(property.StorageName, ToFilterValue(value));
 
             // Contains over inline enumerable
             case NewArrayExpression newArray:
@@ -206,6 +218,41 @@ internal class ChromaFilterTranslator : FilterTranslatorBase
                     : ChromaWhereOperator.In(property.StorageName, values)
             };
         }
+    }
+
+    // r.Strings.Any(s => array.Contains(s)) is true when the field contains at least one of the values.
+    private ChromaWhereOperator? TranslateAny(Expression source, LambdaExpression lambda, bool negated)
+    {
+        if (!TryBindProperty(source, out var property)
+            || lambda.Body is not MethodCallExpression containsCall
+            || !TryMatchContains(containsCall, out var valuesExpression, out var itemExpression)
+            || itemExpression != lambda.Parameters[0])
+        {
+            throw new NotSupportedException("Unsupported method call: Enumerable.Any");
+        }
+
+        IEnumerable values = valuesExpression switch
+        {
+            NewArrayExpression newArray => GetInlineArrayElements(newArray),
+            ConstantExpression { Value: IEnumerable enumerable and not string } => enumerable,
+            _ => throw new NotSupportedException("Unsupported method call: Enumerable.Any")
+        };
+
+        var conditions = values.Cast<object?>()
+            .Select(value => negated
+                ? ChromaWhereOperator.NotContains(property.StorageName, ToFilterValue(value))
+                : ChromaWhereOperator.Contains(property.StorageName, ToFilterValue(value)))
+            .ToList();
+
+        return conditions.Count switch
+        {
+            // Any() over no values matches no record, and its negation matches every record.
+            0 when negated => null,
+            0 => throw new NotSupportedException("Chroma cannot filter on Any() over an empty array."),
+
+            // !(contains a || contains b) is !contains a && !contains b.
+            _ => conditions.Aggregate((left, right) => negated ? left & right : left | right)
+        };
     }
 
     // The elements of an inline array: new[] { "a", "b" }, or none for new string[0], whose only expression is its length.
