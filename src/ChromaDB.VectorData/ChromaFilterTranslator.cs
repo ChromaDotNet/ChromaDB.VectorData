@@ -64,9 +64,9 @@ internal class ChromaFilterTranslator : FilterTranslatorBase
         };
 
     private ChromaWhereOperator TranslateEqual(Expression left, Expression right, bool negated)
-        => TryBindProperty(left, out var property) && right is ConstantExpression { Value: var rightConstant }
+        => TryBindProperty(left, out var property) && TryGetConstant(right, out var rightConstant)
             ? GenerateEqual(property.StorageName, rightConstant, negated)
-            : TryBindProperty(right, out property) && left is ConstantExpression { Value: var leftConstant }
+            : TryBindProperty(right, out property) && TryGetConstant(left, out var leftConstant)
                 ? GenerateEqual(property.StorageName, leftConstant, negated)
                 : throw new NotSupportedException("Invalid equality/comparison");
 
@@ -83,9 +83,9 @@ internal class ChromaFilterTranslator : FilterTranslatorBase
     {
         // Normalize to property-on-the-left.
         var (property, value, nodeType) =
-            TryBindProperty(comparison.Left, out var leftProperty) && comparison.Right is ConstantExpression { Value: var rightValue }
+            TryBindProperty(comparison.Left, out var leftProperty) && TryGetConstant(comparison.Right, out var rightValue)
                 ? (leftProperty, rightValue, comparison.NodeType)
-                : TryBindProperty(comparison.Right, out var rightProperty) && comparison.Left is ConstantExpression { Value: var leftValue }
+                : TryBindProperty(comparison.Right, out var rightProperty) && TryGetConstant(comparison.Left, out var leftValue)
                     ? (rightProperty, leftValue, Flip(comparison.NodeType))
                     : throw new NotSupportedException("Comparison expression not supported by Chroma");
 
@@ -127,6 +127,26 @@ internal class ChromaFilterTranslator : FilterTranslatorBase
                 ExpressionType.LessThanOrEqual => ExpressionType.GreaterThan,
                 _ => throw new InvalidOperationException("Unreachable")
             };
+    }
+
+    // A constant compared with a nullable property is converted to the nullable type, e.g. r => r.NullableInt == 5
+    private static bool TryGetConstant(Expression expression, out object? value)
+    {
+        switch (expression)
+        {
+            case ConstantExpression constant:
+                value = constant.Value;
+                return true;
+
+            case UnaryExpression { NodeType: ExpressionType.Convert, Operand: ConstantExpression constant } convert
+                when Nullable.GetUnderlyingType(convert.Type) == constant.Type:
+                value = constant.Value;
+                return true;
+
+            default:
+                value = null;
+                return false;
+        }
     }
 
     private static ChromaWhereOperator? And(ChromaWhereOperator? left, ChromaWhereOperator? right)
