@@ -193,6 +193,10 @@ internal class ChromaFilterTranslator : FilterTranslatorBase
     }
 
     private static object ToFilterValue(object? value)
-        => ChromaFieldMapping.ToMetadataValue(value)
-            ?? throw new NotSupportedException("Chroma does not support filtering on null values.");
+        => ChromaFieldMapping.ToMetadataValue(value) switch
+        {
+            null => throw new NotSupportedException("Chroma does not support filtering on null values."),
+            IList => throw new NotSupportedException("Chroma does not support comparing an array property with an array."),
+            var metadataValue => metadataValue
+        };
 }
