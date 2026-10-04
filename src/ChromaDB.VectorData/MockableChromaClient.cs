@@ -12,7 +12,6 @@ namespace ChromaDB.VectorData;
 /// </summary>
 internal class MockableChromaClient : IDisposable
 {
-    private readonly ChromaConfigurationOptions _options;
     private readonly HttpClient _httpClient;
     private readonly ChromaClient _chromaClient;
     private readonly bool _ownsClient;
@@ -30,9 +29,8 @@ internal class MockableChromaClient : IDisposable
         Throw.IfNull(httpClient);
 
         // Strings in metadata stay strings, and lists come back as lists of values, not as JSON.
-        _options = options.WithMetadataValues(ChromaMetadataValues.Exact);
         _httpClient = httpClient;
-        _chromaClient = new ChromaClient(_options, httpClient);
+        _chromaClient = new ChromaClient(options.WithMetadataValues(ChromaMetadataValues.Exact), httpClient);
         _ownsClient = ownsClient;
     }
 
@@ -179,6 +177,7 @@ internal class MockableChromaClient : IDisposable
         return this;
     }
 
+    // The collection clients of one ChromaClient share what it keeps, like the server version.
     private ChromaCollectionClient GetCollectionClient(ChromaCollection collection)
-        => new(collection, _options, _httpClient);
+        => _chromaClient.GetCollectionClient(collection);
 }
