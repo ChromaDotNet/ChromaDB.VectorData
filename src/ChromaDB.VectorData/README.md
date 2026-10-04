@@ -73,7 +73,9 @@ services.AddChromaVectorStore("http://localhost:8000");
 - One vector per record: `ReadOnlyMemory<float>`, `Embedding<float>` or `float[]`, or any type with an embedding generator.
 - Data properties: `string`, `int`, `long`, `double`, `float`, `bool`, `DateTime`, `DateTimeOffset`, `DateOnly`, and arrays or lists of these, stored as Chroma metadata; dates are stored as ISO 8601 strings.
 - Distance functions: `CosineSimilarity` (the default), `CosineDistance`, `DotProductSimilarity`, `NegativeDotProductSimilarity`, `EuclideanDistance` and `EuclideanSquaredDistance`, with the HNSW index.
+- An existing collection must use the space of the distance function, as a collection created by another Chroma client without a space uses l2: otherwise the provider throws, rather than turning the distances of another space into scores.
 - Filters: `==` and `!=`, `<`, `<=`, `>` and `>=` on numbers, `&&`, `||`, `!`, `Contains` over an inline list or an array property, and `Any` with `Contains` over an inline list.
+- Filters on the key: `==` and `Contains` over a list of keys, joined to the other conditions with `&&`; Chroma looks the records up by id.
 - NativeAOT and trimming: the dynamic collection, from `GetDynamicCollection` with a `VectorStoreCollectionDefinition`, works without reflection; `ChromaCollection<TKey, TRecord>` maps the properties of the record type by reflection.
 
 ## Limitations
