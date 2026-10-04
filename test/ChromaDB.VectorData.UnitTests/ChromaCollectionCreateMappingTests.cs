@@ -1,10 +1,9 @@
-﻿// Licensed to the .NET Foundation under one or more agreements.
+// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System;
 using Microsoft.Extensions.VectorData;
 using Microsoft.Extensions.VectorData.ProviderServices;
-using Qdrant.Client.Grpc;
 using Xunit;
 
 namespace ChromaDB.VectorData.UnitTests;
@@ -14,72 +13,45 @@ namespace ChromaDB.VectorData.UnitTests;
 /// </summary>
 public class ChromaCollectionCreateMappingTests
 {
-    [Fact]
-    public void MapSingleVectorCreatesVectorParams()
+    [Theory]
+    [InlineData(null, "cosine")]
+    [InlineData(DistanceFunction.CosineSimilarity, "cosine")]
+    [InlineData(DistanceFunction.CosineDistance, "cosine")]
+    [InlineData(DistanceFunction.DotProductSimilarity, "ip")]
+    [InlineData(DistanceFunction.NegativeDotProductSimilarity, "ip")]
+    [InlineData(DistanceFunction.EuclideanDistance, "l2")]
+    [InlineData(DistanceFunction.EuclideanSquaredDistance, "l2")]
+    public void MapCollectionMetadataSetsTheSpace(string? distanceFunction, string expectedSpace)
     {
         // Arrange.
-        var vectorProperty = new VectorPropertyModel("testvector", typeof(ReadOnlyMemory<float>)) { Dimensions = 4, DistanceFunction = DistanceFunction.DotProductSimilarity };
+        var vectorProperty = new VectorPropertyModel("Vector", typeof(ReadOnlyMemory<float>)) { DistanceFunction = distanceFunction };
 
         // Act.
-        var actual = ChromaCollectionCreateMapping.MapSingleVector(vectorProperty);
+        var metadata = ChromaCollectionCreateMapping.MapCollectionMetadata(vectorProperty);
 
         // Assert.
-        Assert.NotNull(actual);
-        Assert.Equal(Distance.Dot, actual.Distance);
-        Assert.Equal(4ul, actual.Size);
+        Assert.Equal(expectedSpace, Assert.Single(metadata, m => m.Key == "hnsw:space").Value);
     }
 
-    [Fact]
-    public void MapSingleVectorDefaultsToCosine()
+    [Theory]
+    [InlineData(DistanceFunction.ManhattanDistance)]
+    [InlineData(DistanceFunction.HammingDistance)]
+    public void MapCollectionMetadataThrowsForUnsupportedDistanceFunction(string distanceFunction)
     {
         // Arrange.
-        var vectorProperty = new VectorPropertyModel("testvector", typeof(ReadOnlyMemory<float>)) { Dimensions = 4 };
-
-        // Act.
-        var actual = ChromaCollectionCreateMapping.MapSingleVector(vectorProperty);
-
-        // Assert.
-        Assert.Equal(Distance.Cosine, actual.Distance);
-    }
-
-    [Fact]
-    public void MapSingleVectorThrowsForUnsupportedDistanceFunction()
-    {
-        // Arrange.
-        var vectorProperty = new VectorPropertyModel("testvector", typeof(ReadOnlyMemory<float>)) { Dimensions = 4, DistanceFunction = DistanceFunction.CosineDistance };
+        var vectorProperty = new VectorPropertyModel("Vector", typeof(ReadOnlyMemory<float>)) { DistanceFunction = distanceFunction };
 
         // Act and assert.
-        Assert.Throws<NotSupportedException>(() => ChromaCollectionCreateMapping.MapSingleVector(vectorProperty));
+        Assert.Throws<NotSupportedException>(() => ChromaCollectionCreateMapping.MapCollectionMetadata(vectorProperty));
     }
 
     [Fact]
-    public void MapNamedVectorsCreatesVectorParamsMap()
+    public void MapCollectionMetadataThrowsForFlatIndex()
     {
         // Arrange.
-        var vectorProperties = new VectorPropertyModel[]
-        {
-            new("testvector1", typeof(ReadOnlyMemory<float>))
-            {
-                Dimensions = 10,
-                DistanceFunction = DistanceFunction.EuclideanDistance,
-                StorageName = "storage_testvector1"
-            },
-            new("testvector2", typeof(ReadOnlyMemory<float>))
-            {
-                Dimensions = 20,
-                StorageName = "storage_testvector2"
-            }
-        };
+        var vectorProperty = new VectorPropertyModel("Vector", typeof(ReadOnlyMemory<float>)) { IndexKind = IndexKind.Flat };
 
-        // Act.
-        var actual = ChromaCollectionCreateMapping.MapNamedVectors(vectorProperties);
-
-        // Assert.
-        Assert.NotNull(actual);
-        Assert.Equal(2, actual.Map.Count);
-        Assert.Equal(10ul, actual.Map["storage_testvector1"].Size);
-        Assert.Equal(Distance.Euclid, actual.Map["storage_testvector1"].Distance);
-        Assert.Equal(20ul, actual.Map["storage_testvector2"].Size);
-        Assert.Equal(Distance.Cosine, actual.Map["storage_testvector2"].Distance);
+        // Act and assert.
+        Assert.Throws<NotSupportedException>(() => ChromaCollectionCreateMapping.MapCollectionMetadata(vectorProperty));
     }
 }
