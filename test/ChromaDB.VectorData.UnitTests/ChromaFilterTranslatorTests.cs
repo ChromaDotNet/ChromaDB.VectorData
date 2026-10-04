@@ -60,6 +60,22 @@ public class ChromaFilterTranslatorTests
     public void ThrowsForContainsOverAnArrayProperty()
         => Assert.Throws<NotSupportedException>(() => Translate(h => h.Tags!.Contains("pool")));
 
+    [Fact]
+    public void ThrowsForContainsOverAnEmptyInlineArray()
+        => Assert.Throws<NotSupportedException>(() => Translate(h => new string[0].Contains(h.HotelName)));
+
+    [Fact]
+    public void ThrowsForContainsOverAnEmptyCapturedList()
+    {
+        var names = new System.Collections.Generic.List<string>();
+
+        Assert.Throws<NotSupportedException>(() => Translate(h => names.Contains(h.HotelName!)));
+    }
+
+    [Fact]
+    public void TranslatesANegatedContainsOverAnEmptyInlineArrayToMatchAll()
+        => Assert.Null(new ChromaFilterTranslator().Translate((Expression<Func<Hotel<string>, bool>>)(h => !new string[0].Contains(h.HotelName)), s_model));
+
     private static string Translate(Expression<Func<Hotel<string>, bool>> filter)
     {
         var where = new ChromaFilterTranslator().Translate(filter, s_model);

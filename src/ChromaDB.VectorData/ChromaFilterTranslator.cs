@@ -156,7 +156,7 @@ internal class ChromaFilterTranslator : FilterTranslatorBase
     private static ChromaWhereOperator? Or(ChromaWhereOperator? left, ChromaWhereOperator? right)
         => left is null || right is null ? null : left | right;
 
-    private ChromaWhereOperator TranslateMethodCall(MethodCallExpression methodCall, bool negated)
+    private ChromaWhereOperator? TranslateMethodCall(MethodCallExpression methodCall, bool negated)
         => methodCall switch
         {
             // Enumerable.Contains(), List.Contains(), MemoryExtensions.Contains()
@@ -166,7 +166,7 @@ internal class ChromaFilterTranslator : FilterTranslatorBase
             _ => throw new NotSupportedException($"Unsupported method call: {methodCall.Method.DeclaringType?.Name}.{methodCall.Method.Name}")
         };
 
-    private ChromaWhereOperator TranslateContains(Expression source, Expression item, bool negated)
+    private ChromaWhereOperator? TranslateContains(Expression source, Expression item, bool negated)
     {
         switch (source)
         {
@@ -176,19 +176,7 @@ internal class ChromaFilterTranslator : FilterTranslatorBase
 
             // Contains over inline enumerable
             case NewArrayExpression newArray:
-                var elements = new object?[newArray.Expressions.Count];
-
-                for (var i = 0; i < newArray.Expressions.Count; i++)
-                {
-                    if (newArray.Expressions[i] is not ConstantExpression { Value: var elementValue })
-                    {
-                        throw new NotSupportedException("Inline array elements must be constants");
-                    }
-
-                    elements[i] = elementValue;
-                }
-
-                return ProcessInlineEnumerable(elements, item);
+                return ProcessInlineEnumerable(GetInlineArrayElements(newArray), item);
 
             case ConstantExpression { Value: IEnumerable enumerable and not string }:
                 return ProcessInlineEnumerable(enumerable, item);
@@ -197,7 +185,7 @@ internal class ChromaFilterTranslator : FilterTranslatorBase
                 throw new NotSupportedException("Unsupported Contains");
         }
 
-        ChromaWhereOperator ProcessInlineEnumerable(IEnumerable elements, Expression item)
+        ChromaWhereOperator? ProcessInlineEnumerable(IEnumerable elements, Expression item)
         {
             if (!TryBindProperty(item, out var property))
             {
@@ -206,11 +194,32 @@ internal class ChromaFilterTranslator : FilterTranslatorBase
 
             var values = elements.Cast<object?>().Select(ToFilterValue).ToArray();
 
-            return negated
-                ? ChromaWhereOperator.NotIn(property.StorageName, values)
-                : ChromaWhereOperator.In(property.StorageName, values);
+            return values.Length switch
+            {
+                // Chroma rejects $in and $nin without values. Contains over no values matches no record,
+                // and its negation matches every record.
+                0 when negated => null,
+                0 => throw new NotSupportedException("Chroma cannot filter on Contains over an empty array."),
+
+                _ => negated
+                    ? ChromaWhereOperator.NotIn(property.StorageName, values)
+                    : ChromaWhereOperator.In(property.StorageName, values)
+            };
         }
     }
+
+    // The elements of an inline array: new[] { "a", "b" }, or none for new string[0], whose only expression is its length.
+    private static object?[] GetInlineArrayElements(NewArrayExpression newArray)
+        => newArray switch
+        {
+            { NodeType: ExpressionType.NewArrayInit } => newArray.Expressions
+                .Select(element => element is ConstantExpression { Value: var value }
+                    ? value
+                    : throw new NotSupportedException("Inline array elements must be constants"))
+                .ToArray(),
+            { NodeType: ExpressionType.NewArrayBounds, Expressions: [ConstantExpression { Value: 0 }] } => [],
+            _ => throw new NotSupportedException("Unsupported inline array")
+        };
 
     private static object ToFilterValue(object? value)
         => ChromaFieldMapping.ToMetadataValue(value) switch
