@@ -68,11 +68,8 @@ internal class MockableChromaClient : IDisposable
     /// </summary>
     /// <param name="collectionName">The name of the collection.</param>
     /// <param name="cancellationToken">The token to monitor for cancellation requests.</param>
-    public virtual async Task<bool> CollectionExistsAsync(string collectionName, CancellationToken cancellationToken = default)
-    {
-        var collections = await _chromaClient.ListCollections(cancellationToken: cancellationToken).ConfigureAwait(false);
-        return collections.Any(collection => collection.Name == collectionName);
-    }
+    public virtual Task<bool> CollectionExistsAsync(string collectionName, CancellationToken cancellationToken = default)
+        => _chromaClient.CollectionExists(collectionName, cancellationToken: cancellationToken);
 
     /// <summary>
     /// Get a collection, creating it with the given metadata if it does not exist.
