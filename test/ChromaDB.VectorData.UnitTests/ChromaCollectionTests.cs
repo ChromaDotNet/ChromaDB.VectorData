@@ -276,6 +276,49 @@ public class ChromaCollectionTests
     }
 
     [Fact]
+    public async Task LooksTheCollectionUpAgainWhenChromaNoLongerFindsItAsync()
+    {
+        // Arrange: the collection was deleted and created again elsewhere, so it has a new id.
+        var recreatedCollection = new ChromaCollection(TestCollectionName) { Id = Guid.NewGuid() };
+        using var sut = new ChromaCollection<string, Hotel<string>>(() => this._chromaClientMock.Object, "recreatedcollection", null);
+        this._chromaClientMock
+            .SetupSequence(x => x.GetCollectionAsync("recreatedcollection", this._testCancellationToken))
+            .ReturnsAsync(this._chromaCollection)
+            .ReturnsAsync(recreatedCollection);
+        this._chromaClientMock
+            .Setup(x => x.DeleteAsync(this._chromaCollection, It.IsAny<List<string>>(), this._testCancellationToken))
+            .Returns(Task.CompletedTask);
+        this._chromaClientMock
+            .Setup(x => x.GetAsync(this._chromaCollection, It.IsAny<List<string>>(), null, null, null, ChromaGetInclude.Metadatas, this._testCancellationToken))
+            .ThrowsAsync(new ChromaException("Collection does not exist.") { StatusCode = System.Net.HttpStatusCode.NotFound, ErrorType = "NotFoundError" });
+        this._chromaClientMock
+            .Setup(x => x.GetAsync(recreatedCollection, It.IsAny<List<string>>(), null, null, null, ChromaGetInclude.Metadatas, this._testCancellationToken))
+            .ReturnsAsync([new ChromaCollectionEntry("h1")]);
+
+        // Act: the delete keeps the id, the get finds that it no longer exists.
+        await sut.DeleteAsync("h0", this._testCancellationToken);
+        var record = await sut.GetAsync("h1", cancellationToken: this._testCancellationToken);
+
+        // Assert.
+        Assert.Equal("h1", record?.HotelId);
+        this._chromaClientMock.Verify(x => x.GetCollectionAsync("recreatedcollection", this._testCancellationToken), Times.Exactly(2));
+    }
+
+    [Fact]
+    public async Task ThrowsWhenTheCollectionIsMissingOnTheFirstLookupAsync()
+    {
+        // Arrange: without a kept id there is nothing to look up again.
+        using var sut = new ChromaCollection<string, Hotel<string>>(() => this._chromaClientMock.Object, "missingcollection", null);
+        this._chromaClientMock
+            .Setup(x => x.GetCollectionAsync("missingcollection", this._testCancellationToken))
+            .ThrowsAsync(new ChromaException("Collection does not exist.") { StatusCode = System.Net.HttpStatusCode.NotFound, ErrorType = "NotFoundError" });
+
+        // Act and assert.
+        await Assert.ThrowsAsync<VectorStoreException>(() => sut.GetAsync("h1", cancellationToken: this._testCancellationToken));
+        this._chromaClientMock.Verify(x => x.GetCollectionAsync("missingcollection", this._testCancellationToken), Times.Once);
+    }
+
+    [Fact]
     public async Task GetWithOrderByThrowsAsync()
     {
         using var sut = this.CreateCollection<string, Hotel<string>>();

@@ -209,14 +209,14 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
 
         var entries = await RunOperationAsync(
             OperationName,
-            async () => await _chromaClient.GetAsync(
-                await GetChromaCollectionAsync(cancellationToken).ConfigureAwait(false),
+            () => RunOnCollectionAsync(collection => _chromaClient.GetAsync(
+                collection,
                 ids,
                 where: null,
                 limit: null,
                 offset: null,
                 GetInclude(includeVectors),
-                cancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+                cancellationToken), cancellationToken)).ConfigureAwait(false);
 
         foreach (var entry in entries)
         {
@@ -245,10 +245,10 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
 
         return RunOperationAsync(
             DeleteName,
-            async () => await _chromaClient.DeleteAsync(
-                await GetChromaCollectionAsync(cancellationToken).ConfigureAwait(false),
+            () => RunOnCollectionAsync(collection => _chromaClient.DeleteAsync(
+                collection,
                 ids,
-                cancellationToken).ConfigureAwait(false));
+                cancellationToken), cancellationToken));
     }
 
     /// <inheritdoc />
@@ -310,12 +310,12 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
 
         await RunOperationAsync(
             UpsertName,
-            async () => await _chromaClient.UpsertAsync(
-                await GetChromaCollectionAsync(cancellationToken).ConfigureAwait(false),
+            () => RunOnCollectionAsync(collection => _chromaClient.UpsertAsync(
+                collection,
                 ids,
                 embeddings,
                 hasMetadata ? metadatas : null,
-                cancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+                cancellationToken), cancellationToken)).ConfigureAwait(false);
     }
 
     #region Search
@@ -356,14 +356,14 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
         // Chroma has no offset in queries: ask for the skipped records too, and drop them here.
         var entries = await RunOperationAsync(
             "Query",
-            async () => await _chromaClient.QueryAsync(
-                await GetChromaCollectionAsync(cancellationToken).ConfigureAwait(false),
+            () => RunOnCollectionAsync(collection => _chromaClient.QueryAsync(
+                collection,
                 vector,
                 top + options.Skip,
                 filter.Where,
                 filter.Ids,
                 include,
-                cancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+                cancellationToken), cancellationToken)).ConfigureAwait(false);
 
         foreach (var entry in entries.Skip(options.Skip))
         {
@@ -418,14 +418,14 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
 
         var entries = await RunOperationAsync(
             "Get",
-            async () => await _chromaClient.GetAsync(
-                await GetChromaCollectionAsync(cancellationToken).ConfigureAwait(false),
+            () => RunOnCollectionAsync(collection => _chromaClient.GetAsync(
+                collection,
                 chromaFilter.Ids,
                 chromaFilter.Where,
                 limit: top,
                 offset: options.Skip,
                 GetInclude(options.IncludeVectors),
-                cancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+                cancellationToken), cancellationToken)).ConfigureAwait(false);
 
         foreach (var entry in entries)
         {
@@ -454,6 +454,34 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
     /// <summary>
     /// Get the Chroma collection, reading it the first time; record operations need its id.
     /// </summary>
+    /// <summary>
+    /// Run an operation on the Chroma collection. Its id is kept after the first lookup, and a collection deleted and created
+    /// again elsewhere has a new id: when Chroma no longer finds the kept id, the collection is looked up again by name, once.
+    /// </summary>
+    private async Task<T> RunOnCollectionAsync<T>(Func<ChromaCollection, Task<T>> operation, CancellationToken cancellationToken)
+    {
+        var wasKept = _chromaCollection is not null;
+        try
+        {
+            return await operation(await GetChromaCollectionAsync(cancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+        }
+        catch (ChromaException exception) when (wasKept && IsCollectionNotFound(exception))
+        {
+            _chromaCollection = null;
+            return await operation(await GetChromaCollectionAsync(cancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+        }
+    }
+
+    private Task RunOnCollectionAsync(Func<ChromaCollection, Task> operation, CancellationToken cancellationToken)
+        => RunOnCollectionAsync<bool>(async collection =>
+        {
+            await operation(collection).ConfigureAwait(false);
+            return true;
+        }, cancellationToken);
+
+    private static bool IsCollectionNotFound(ChromaException exception)
+        => exception.ErrorType == "NotFoundError" || exception.StatusCode == System.Net.HttpStatusCode.NotFound;
+
     private async Task<ChromaCollection> GetChromaCollectionAsync(CancellationToken cancellationToken)
         => _chromaCollection ??= VerifySpace(await _chromaClient.GetCollectionAsync(Name, cancellationToken).ConfigureAwait(false));
 
