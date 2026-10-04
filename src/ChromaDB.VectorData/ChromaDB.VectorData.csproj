@@ -2,6 +2,7 @@
   
   <PropertyGroup>
     <VersionPrefix>0.1.0</VersionPrefix>
+    <VersionSuffix>preview.1</VersionSuffix>
     <AssemblyName>ChromaDB.VectorData</AssemblyName>
     <PackageId>ChromaDotNet.VectorData</PackageId>
     <RootNamespace>$(AssemblyName)</RootNamespace>

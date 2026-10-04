@@ -15,7 +15,7 @@ docker run -d --name chroma -p 8000:8000 chromadb/chroma
 2. Install the NuGet package:
 
 ```bash
-dotnet add package ChromaDotNet.VectorData
+dotnet add package ChromaDotNet.VectorData --prerelease
 ```
 
 3. Store and search records:
