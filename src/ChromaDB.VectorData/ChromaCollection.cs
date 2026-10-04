@@ -151,12 +151,8 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
     /// <inheritdoc />
     public override async Task EnsureCollectionExistsAsync(CancellationToken cancellationToken = default)
     {
-        // Chroma indexes every metadata field for filtering; full-text search is on documents only.
-        if (_model.DataProperties.FirstOrDefault(p => p.IsFullTextIndexed) is { } fullTextProperty)
-        {
-            throw new NotSupportedException($"Property {nameof(VectorStoreDataProperty.IsFullTextIndexed)} on {nameof(VectorStoreDataProperty)} '{fullTextProperty.ModelName}' is set to true, but the Chroma VectorStore does not support full-text search on data properties.");
-        }
-
+        // IsFullTextIndexed is accepted and has no effect, like IsIndexed: Chroma indexes every metadata field for filtering,
+        // and the provider has no hybrid search, the only operation that uses a full-text index.
         var definition = ChromaCollectionCreateMapping.MapCollectionDefinition(Name, _model.VectorProperty);
 
         _chromaCollection = await RunOperationAsync(

@@ -69,11 +69,19 @@ public class ChromaCollectionTests
     }
 
     [Fact]
-    public async Task EnsureCollectionExistsThrowsForAFullTextIndexedPropertyAsync()
+    public async Task EnsureCollectionExistsAcceptsAFullTextIndexedPropertyAsync()
     {
+        // Arrange.
         using var sut = this.CreateCollection<string, FullTextHotel>();
+        this._chromaClientMock
+            .Setup(x => x.GetOrCreateCollectionAsync(It.IsAny<ChromaCollectionDefinition>(), this._testCancellationToken))
+            .ReturnsAsync(this._chromaCollection);
 
-        await Assert.ThrowsAsync<NotSupportedException>(() => sut.EnsureCollectionExistsAsync(this._testCancellationToken));
+        // Act.
+        await sut.EnsureCollectionExistsAsync(this._testCancellationToken);
+
+        // Assert.
+        this._chromaClientMock.Verify(x => x.GetOrCreateCollectionAsync(It.IsAny<ChromaCollectionDefinition>(), this._testCancellationToken), Times.Once);
     }
 
     [Fact]
