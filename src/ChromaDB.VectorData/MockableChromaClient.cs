@@ -1,32 +1,37 @@
-﻿// Licensed to the .NET Foundation under one or more agreements.
+// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using Qdrant.Client;
-using Qdrant.Client.Grpc;
+using ChromaDB.Client;
+using ChromaDB.Client.Models;
 using Microsoft.Shared.Diagnostics;
 
 namespace ChromaDB.VectorData;
 
 /// <summary>
-/// Decorator class for <see cref="QdrantClient"/> that exposes the required methods as virtual allowing for mocking in unit tests.
+/// Decorator class for <see cref="ChromaClient"/> and <see cref="ChromaCollectionClient"/> that exposes the required methods as virtual allowing for mocking in unit tests.
 /// </summary>
 internal class MockableChromaClient : IDisposable
 {
-    /// <summary>Qdrant client that can be used to manage the collections and points in a Qdrant store.</summary>
-    private readonly QdrantClient _qdrantClient;
+    private readonly ChromaConfigurationOptions _options;
+    private readonly HttpClient _httpClient;
+    private readonly ChromaClient _chromaClient;
     private readonly bool _ownsClient;
     private int _referenceCount = 1;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MockableChromaClient"/> class.
     /// </summary>
-    /// <param name="qdrantClient">Qdrant client that can be used to manage the collections and points in a Qdrant store.</param>
-    /// <param name="ownsClient">A value indicating whether <paramref name="qdrantClient"/> is disposed when the vector store is disposed.</param>
-    public MockableChromaClient(QdrantClient qdrantClient, bool ownsClient = true)
+    /// <param name="options">The options used to connect to Chroma.</param>
+    /// <param name="httpClient">The <see cref="HttpClient"/> used to send the requests to Chroma.</param>
+    /// <param name="ownsClient">A value indicating whether <paramref name="httpClient"/> is disposed when the vector store is disposed.</param>
+    public MockableChromaClient(ChromaConfigurationOptions options, HttpClient httpClient, bool ownsClient = true)
     {
-        Throw.IfNull(qdrantClient);
+        Throw.IfNull(options);
+        Throw.IfNull(httpClient);
 
-        _qdrantClient = qdrantClient;
+        _options = options;
+        _httpClient = httpClient;
+        _chromaClient = new ChromaClient(options, httpClient);
         _ownsClient = ownsClient;
     }
 
@@ -42,9 +47,9 @@ internal class MockableChromaClient : IDisposable
 #pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
 
     /// <summary>
-    /// Gets the internal <see cref="QdrantClient"/> that this mockable instance wraps.
+    /// Gets the internal <see cref="ChromaClient"/> that this mockable instance wraps.
     /// </summary>
-    public QdrantClient QdrantClient => _qdrantClient;
+    public ChromaClient ChromaClient => _chromaClient;
 
     public void Dispose()
     {
@@ -52,7 +57,7 @@ internal class MockableChromaClient : IDisposable
         {
             if (Interlocked.Decrement(ref _referenceCount) == 0)
             {
-                _qdrantClient.Dispose();
+                _httpClient.Dispose();
             }
         }
     }
@@ -61,290 +66,110 @@ internal class MockableChromaClient : IDisposable
     /// Check if a collection exists.
     /// </summary>
     /// <param name="collectionName">The name of the collection.</param>
-    /// <param name="cancellationToken">
-    /// The token to monitor for cancellation requests. The default value is <see cref="CancellationToken.None" />.
-    /// </param>
-    public virtual Task<bool> CollectionExistsAsync(
-        string collectionName,
-        CancellationToken cancellationToken = default)
-        => _qdrantClient.CollectionExistsAsync(collectionName, cancellationToken);
+    /// <param name="cancellationToken">The token to monitor for cancellation requests.</param>
+    public virtual async Task<bool> CollectionExistsAsync(string collectionName, CancellationToken cancellationToken = default)
+    {
+        var collections = await _chromaClient.ListCollections(cancellationToken: cancellationToken).ConfigureAwait(false);
+        return collections.Any(collection => collection.Name == collectionName);
+    }
 
     /// <summary>
-    /// Creates a new collection with the given parameters.
-    /// </summary>
-    /// <param name="collectionName">The name of the collection to be created.</param>
-    /// <param name="vectorsConfig">
-    /// Configuration of the vector storage. Vector params contains size and distance for the vector storage.
-    /// This overload creates a single anonymous vector storage.
-    /// </param>
-    /// <param name="cancellationToken">
-    /// The token to monitor for cancellation requests. The default value is <see cref="CancellationToken.None" />.
-    /// </param>
-    public virtual Task CreateCollectionAsync(
-        string collectionName,
-        VectorParams vectorsConfig,
-        CancellationToken cancellationToken = default)
-        => _qdrantClient.CreateCollectionAsync(
-            collectionName,
-            vectorsConfig,
-            cancellationToken: cancellationToken);
-
-    /// <summary>
-    /// Creates a new collection with the given parameters.
-    /// </summary>
-    /// <param name="collectionName">The name of the collection to be created.</param>
-    /// <param name="vectorsConfig">
-    /// Configuration of the vector storage. Vector params contains size and distance for the vector storage.
-    /// This overload creates a vector storage for each key in the provided map.
-    /// </param>
-    /// <param name="cancellationToken">
-    /// The token to monitor for cancellation requests. The default value is <see cref="CancellationToken.None" />.
-    /// </param>
-    public virtual Task CreateCollectionAsync(
-        string collectionName,
-        VectorParamsMap? vectorsConfig = null,
-        CancellationToken cancellationToken = default)
-        => _qdrantClient.CreateCollectionAsync(
-            collectionName,
-            vectorsConfig,
-            cancellationToken: cancellationToken);
-
-    /// <summary>
-    /// Creates a payload field index in a collection.
+    /// Get a collection, creating it with the given metadata if it does not exist.
     /// </summary>
     /// <param name="collectionName">The name of the collection.</param>
-    /// <param name="fieldName">Field name to index.</param>
-    /// <param name="schemaType">The schema type of the field.</param>
-    /// <param name="cancellationToken">
-    /// The token to monitor for cancellation requests. The default value is <see cref="CancellationToken.None" />.
-    /// </param>
-    public virtual Task<UpdateResult> CreatePayloadIndexAsync(
-        string collectionName,
-        string fieldName,
-        PayloadSchemaType schemaType = PayloadSchemaType.Keyword,
-        CancellationToken cancellationToken = default)
-        => _qdrantClient.CreatePayloadIndexAsync(collectionName, fieldName, schemaType, cancellationToken: cancellationToken);
+    /// <param name="metadata">The metadata of the collection, used only when it is created.</param>
+    /// <param name="cancellationToken">The token to monitor for cancellation requests.</param>
+    public virtual Task<ChromaCollection> GetOrCreateCollectionAsync(string collectionName, Dictionary<string, object>? metadata, CancellationToken cancellationToken = default)
+        => _chromaClient.GetOrCreateCollection(collectionName, metadata, cancellationToken: cancellationToken);
 
     /// <summary>
-    /// Drop a collection and all its associated data.
+    /// Get a collection.
     /// </summary>
     /// <param name="collectionName">The name of the collection.</param>
-    /// <param name="timeout">Wait timeout for operation commit in seconds, if not specified - default value will be supplied</param>
-    /// <param name="cancellationToken">
-    /// The token to monitor for cancellation requests. The default value is <see cref="CancellationToken.None" />.
-    /// </param>
-    public virtual Task DeleteCollectionAsync(
-        string collectionName,
-        TimeSpan? timeout = null,
-        CancellationToken cancellationToken = default)
-        => _qdrantClient.DeleteCollectionAsync(collectionName, timeout, cancellationToken);
+    /// <param name="cancellationToken">The token to monitor for cancellation requests.</param>
+    public virtual Task<ChromaCollection> GetCollectionAsync(string collectionName, CancellationToken cancellationToken = default)
+        => _chromaClient.GetCollection(collectionName, cancellationToken: cancellationToken);
 
     /// <summary>
-    /// Gets the names of all existing collections.
-    /// </summary>
-    /// <param name="cancellationToken">
-    /// The token to monitor for cancellation requests. The default value is <see cref="CancellationToken.None" />.
-    /// </param>
-    public virtual Task<IReadOnlyList<string>> ListCollectionsAsync(CancellationToken cancellationToken = default)
-        => _qdrantClient.ListCollectionsAsync(cancellationToken);
-
-    /// <summary>
-    /// Delete a point.
+    /// Delete a collection.
     /// </summary>
     /// <param name="collectionName">The name of the collection.</param>
-    /// <param name="id">The ID to delete.</param>
-    /// <param name="wait">Whether to wait until the changes have been applied. Defaults to <c>true</c>.</param>
-    /// <param name="ordering">Write ordering guarantees. Defaults to <c>Weak</c>.</param>
-    /// <param name="shardKeySelector">Option for custom sharding to specify used shard keys.</param>
-    /// <param name="cancellationToken">
-    /// The token to monitor for cancellation requests. The default value is <see cref="CancellationToken.None" />.
-    /// </param>
-    public virtual Task<UpdateResult> DeleteAsync(
-        string collectionName,
-        ulong id,
-        bool wait = true,
-        WriteOrderingType? ordering = null,
-        ShardKeySelector? shardKeySelector = null,
-        CancellationToken cancellationToken = default)
-        => _qdrantClient.DeleteAsync(collectionName, id, wait, ordering, shardKeySelector, cancellationToken: cancellationToken);
+    /// <param name="cancellationToken">The token to monitor for cancellation requests.</param>
+    public virtual Task DeleteCollectionAsync(string collectionName, CancellationToken cancellationToken = default)
+        => _chromaClient.DeleteCollection(collectionName, cancellationToken: cancellationToken);
 
     /// <summary>
-    /// Delete a point.
+    /// List the names of the collections.
     /// </summary>
-    /// <param name="collectionName">The name of the collection.</param>
-    /// <param name="id">The ID to delete.</param>
-    /// <param name="wait">Whether to wait until the changes have been applied. Defaults to <c>true</c>.</param>
-	/// <param name="ordering">Write ordering guarantees. Defaults to <c>Weak</c>.</param>
-	/// <param name="shardKeySelector">Option for custom sharding to specify used shard keys.</param>
-    /// <param name="cancellationToken">
-    /// The token to monitor for cancellation requests. The default value is <see cref="CancellationToken.None" />.
-    /// </param>
-    public virtual Task<UpdateResult> DeleteAsync(
-        string collectionName,
-        Guid id,
-        bool wait = true,
-        WriteOrderingType? ordering = null,
-        ShardKeySelector? shardKeySelector = null,
-        CancellationToken cancellationToken = default)
-        => _qdrantClient.DeleteAsync(collectionName, id, wait, ordering, shardKeySelector, cancellationToken: cancellationToken);
+    /// <param name="cancellationToken">The token to monitor for cancellation requests.</param>
+    public virtual async Task<IReadOnlyList<string>> ListCollectionsAsync(CancellationToken cancellationToken = default)
+    {
+        var collections = await _chromaClient.ListCollections(cancellationToken: cancellationToken).ConfigureAwait(false);
+        return collections.Select(collection => collection.Name).ToList();
+    }
 
     /// <summary>
-    /// Delete a point.
+    /// Get the records of a collection by their ids, by a filter, or both.
     /// </summary>
-    /// <param name="collectionName">The name of the collection.</param>
-    /// <param name="ids">The IDs to delete.</param>
-    /// <param name="wait">Whether to wait until the changes have been applied. Defaults to <c>true</c>.</param>
-	/// <param name="ordering">Write ordering guarantees. Defaults to <c>Weak</c>.</param>
-	/// <param name="shardKeySelector">Option for custom sharding to specify used shard keys.</param>
-    /// <param name="cancellationToken">
-    /// The token to monitor for cancellation requests. The default value is <see cref="CancellationToken.None" />.
-    /// </param>
-    public virtual Task<UpdateResult> DeleteAsync(
-        string collectionName,
-        IReadOnlyList<ulong> ids,
-        bool wait = true,
-        WriteOrderingType? ordering = null,
-        ShardKeySelector? shardKeySelector = null,
+    /// <param name="collection">The collection.</param>
+    /// <param name="ids">The ids of the records, or <see langword="null"/> for any record.</param>
+    /// <param name="where">The metadata filter, or <see langword="null"/> for no filter.</param>
+    /// <param name="limit">The maximum number of records to return.</param>
+    /// <param name="offset">The number of records to skip.</param>
+    /// <param name="include">The fields to return.</param>
+    /// <param name="cancellationToken">The token to monitor for cancellation requests.</param>
+    public virtual Task<List<ChromaCollectionEntry>> GetAsync(
+        ChromaCollection collection,
+        List<string>? ids,
+        ChromaWhereOperator? where,
+        int? limit,
+        int? offset,
+        ChromaGetInclude include,
         CancellationToken cancellationToken = default)
-        => _qdrantClient.DeleteAsync(collectionName, ids, wait, ordering, shardKeySelector, cancellationToken: cancellationToken);
+        => GetCollectionClient(collection).Get(ids, where, whereDocument: null, limit, offset, include, cancellationToken);
 
     /// <summary>
-    /// Delete a point.
+    /// Find the records nearest to a vector.
     /// </summary>
-    /// <param name="collectionName">The name of the collection.</param>
-    /// <param name="ids">The IDs to delete.</param>
-    /// <param name="wait">Whether to wait until the changes have been applied. Defaults to <c>true</c>.</param>
-	/// <param name="ordering">Write ordering guarantees. Defaults to <c>Weak</c>.</param>
-	/// <param name="shardKeySelector">Option for custom sharding to specify used shard keys.</param>
-    /// <param name="cancellationToken">
-    /// The token to monitor for cancellation requests. The default value is <see cref="CancellationToken.None" />.
-    /// </param>
-    public virtual Task<UpdateResult> DeleteAsync(
-        string collectionName,
-        IReadOnlyList<Guid> ids,
-        bool wait = true,
-        WriteOrderingType? ordering = null,
-        ShardKeySelector? shardKeySelector = null,
+    /// <param name="collection">The collection.</param>
+    /// <param name="queryEmbedding">The vector to search for.</param>
+    /// <param name="nResults">The number of records to return.</param>
+    /// <param name="where">The metadata filter, or <see langword="null"/> for no filter.</param>
+    /// <param name="include">The fields to return.</param>
+    /// <param name="cancellationToken">The token to monitor for cancellation requests.</param>
+    public virtual Task<List<ChromaCollectionQueryEntry>> QueryAsync(
+        ChromaCollection collection,
+        ReadOnlyMemory<float> queryEmbedding,
+        int nResults,
+        ChromaWhereOperator? where,
+        ChromaQueryInclude include,
         CancellationToken cancellationToken = default)
-        => _qdrantClient.DeleteAsync(collectionName, ids, wait, ordering, shardKeySelector, cancellationToken: cancellationToken);
+        => GetCollectionClient(collection).Query(queryEmbedding, nResults, where, whereDocument: null, include, cancellationToken);
 
     /// <summary>
-    /// Perform insert and updates on points. If a point with a given ID already exists, it will be overwritten.
+    /// Insert or update records.
     /// </summary>
-    /// <param name="collectionName">The name of the collection.</param>
-    /// <param name="points">The points to be upserted.</param>
-    /// <param name="wait">Whether to wait until the changes have been applied. Defaults to <c>true</c>.</param>
-    /// <param name="ordering">Write ordering guarantees.</param>
-    /// <param name="shardKeySelector">Option for custom sharding to specify used shard keys.</param>
-    /// <param name="cancellationToken">
-    /// The token to monitor for cancellation requests. The default value is <see cref="CancellationToken.None" />.
-    /// </param>
-    public virtual Task<UpdateResult> UpsertAsync(
-        string collectionName,
-        IReadOnlyList<PointStruct> points,
-        bool wait = true,
-        WriteOrderingType? ordering = null,
-        ShardKeySelector? shardKeySelector = null,
+    /// <param name="collection">The collection.</param>
+    /// <param name="ids">The ids of the records.</param>
+    /// <param name="embeddings">The vectors of the records, in the same order as <paramref name="ids"/>.</param>
+    /// <param name="metadatas">The metadata of the records, in the same order as <paramref name="ids"/>.</param>
+    /// <param name="cancellationToken">The token to monitor for cancellation requests.</param>
+    public virtual Task UpsertAsync(
+        ChromaCollection collection,
+        List<string> ids,
+        List<ReadOnlyMemory<float>> embeddings,
+        List<Dictionary<string, object>>? metadatas,
         CancellationToken cancellationToken = default)
-        => _qdrantClient.UpsertAsync(collectionName, points, wait, ordering, shardKeySelector, cancellationToken);
+        => GetCollectionClient(collection).Upsert(ids, embeddings, metadatas, documents: null, cancellationToken);
 
     /// <summary>
-    /// Retrieve points.
+    /// Delete records by their ids.
     /// </summary>
-    /// <param name="collectionName">The name of the collection.</param>
-    /// <param name="ids">List of points to retrieve.</param>
-    /// <param name="withPayload">Whether to include the payload or not.</param>
-    /// <param name="withVectors">Whether to include the vectors or not.</param>
-    /// <param name="readConsistency">Options for specifying read consistency guarantees.</param>
-    /// <param name="shardKeySelector">Option for custom sharding to specify used shard keys.</param>
-    /// <param name="cancellationToken">
-    /// The token to monitor for cancellation requests. The default value is <see cref="CancellationToken.None" />.
-    /// </param>
-    public virtual Task<IReadOnlyList<RetrievedPoint>> RetrieveAsync(
-        string collectionName,
-        IReadOnlyList<PointId> ids,
-        bool withPayload = true,
-        bool withVectors = false,
-        ReadConsistency? readConsistency = null,
-        ShardKeySelector? shardKeySelector = null,
-        CancellationToken cancellationToken = default)
-        => _qdrantClient.RetrieveAsync(collectionName, ids, withPayload, withVectors, readConsistency, shardKeySelector, cancellationToken);
-
-    /// <summary>
-    /// Universally query points.
-    /// Covers all capabilities of search, recommend, discover, filters.
-    /// Also enables hybrid and multi-stage queries.
-    /// </summary>
-    /// <param name="collectionName">The name of the collection.</param>
-    /// <param name="query">Query to perform. If missing, returns points ordered by their IDs.</param>
-    /// <param name="prefetch">Sub-requests to perform first. If present, the query will be performed on the results of the prefetches.</param>
-    /// <param name="usingVector">Name of the vector to use for querying. If missing, the default vector is used..</param>
-    /// <param name="filter">Filter conditions - return only those points that satisfy the specified conditions.</param>
-    /// <param name="scoreThreshold">Return points with scores better than this threshold.</param>
-    /// <param name="searchParams">Search config.</param>
-    /// <param name="limit">Max number of results.</param>
-    /// <param name="offset">Offset of the result.</param>
-    /// <param name="payloadSelector">Options for specifying which payload to include or not.</param>
-    /// <param name="vectorsSelector">Options for specifying which vectors to include into the response.</param>
-    /// <param name="readConsistency">Options for specifying read consistency guarantees.</param>
-    /// <param name="shardKeySelector">Specify in which shards to look for the points, if not specified - look in all shards.</param>
-    /// <param name="lookupFrom">The location to use for IDs lookup, if not specified - use the current collection and the 'usingVector' vector</param>
-    /// <param name="timeout">If set, overrides global timeout setting for this request.</param>
-    /// <param name="cancellationToken">The token to monitor for cancellation requests. The default value is <see cref="CancellationToken.None" />.
-    /// </param>
-    public virtual Task<IReadOnlyList<ScoredPoint>> QueryAsync(
-        string collectionName,
-        Query? query = null,
-        IReadOnlyList<PrefetchQuery>? prefetch = null,
-        string? usingVector = null,
-        Filter? filter = null,
-        float? scoreThreshold = null,
-        SearchParams? searchParams = null,
-        ulong limit = 10,
-        ulong offset = 0,
-        WithPayloadSelector? payloadSelector = null,
-        WithVectorsSelector? vectorsSelector = null,
-        ReadConsistency? readConsistency = null,
-        ShardKeySelector? shardKeySelector = null,
-        LookupLocation? lookupFrom = null,
-        TimeSpan? timeout = null,
-        CancellationToken cancellationToken = default)
-        => _qdrantClient.QueryAsync(
-            collectionName,
-            query,
-            prefetch,
-            usingVector,
-            filter,
-            scoreThreshold,
-            searchParams,
-            limit,
-            offset,
-            payloadSelector,
-            vectorsSelector,
-            readConsistency,
-            shardKeySelector,
-            lookupFrom,
-            timeout,
-            cancellationToken);
-
-    public virtual Task<ScrollResponse> ScrollAsync(
-        string collectionName,
-        Filter filter,
-        WithVectorsSelector vectorsSelector,
-        uint limit = 10,
-        OrderBy? orderBy = null,
-        CancellationToken cancellationToken = default)
-        => _qdrantClient.ScrollAsync(
-            collectionName,
-            filter,
-            limit,
-            offset: null,
-            payloadSelector: null,
-            vectorsSelector,
-            readConsistency: null,
-            shardKeySelector: null,
-            orderBy,
-            cancellationToken);
+    /// <param name="collection">The collection.</param>
+    /// <param name="ids">The ids of the records.</param>
+    /// <param name="cancellationToken">The token to monitor for cancellation requests.</param>
+    public virtual Task DeleteAsync(ChromaCollection collection, List<string> ids, CancellationToken cancellationToken = default)
+        => GetCollectionClient(collection).Delete(ids, cancellationToken: cancellationToken);
 
     internal MockableChromaClient Share()
     {
@@ -355,4 +180,7 @@ internal class MockableChromaClient : IDisposable
 
         return this;
     }
+
+    private ChromaCollectionClient GetCollectionClient(ChromaCollection collection)
+        => new(collection, _options, _httpClient);
 }

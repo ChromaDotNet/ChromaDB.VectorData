@@ -5,5 +5,5 @@ namespace ChromaDB.VectorData;
 
 internal static class ChromaConstants
 {
-    internal const string VectorStoreSystemName = "qdrant";
+    internal const string VectorStoreSystemName = "chroma";
 }
