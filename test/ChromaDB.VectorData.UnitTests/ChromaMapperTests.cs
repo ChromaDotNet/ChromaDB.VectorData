@@ -50,6 +50,20 @@ public class ChromaMapperTests
     }
 
     [Fact]
+    public void LeavesEmptyListsOutOfTheMetadata()
+    {
+        // Arrange.
+        var sut = new ChromaMapper<Hotel<string>>(BuildModel<string>());
+        var hotel = new Hotel<string> { HotelId = "h1", Tags = [], Embedding = new float[] { 1, 2, 3, 4 } };
+
+        // Act.
+        var metadata = sut.MapFromDataToStorageModel(hotel, 0, generatedEmbeddings: null).Metadata!;
+
+        // Assert.
+        Assert.False(metadata.ContainsKey("Tags"));
+    }
+
+    [Fact]
     public void ThrowsWhenTheVectorIsMissing()
     {
         // Arrange.

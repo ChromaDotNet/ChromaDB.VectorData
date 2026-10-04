@@ -79,6 +79,7 @@ services.AddChromaVectorStore("http://localhost:8000");
 ## Limitations
 
 - Chroma metadata has no null values: a null property is not stored, and filtering on null is not supported.
+- Chroma does not store empty lists: an empty array or list is not stored, and comes back as null.
 - `GetAsync` with a filter does not support ordering.
 - Comparisons work on numbers only.
 - Array properties need Chroma 1.5.0 or later.

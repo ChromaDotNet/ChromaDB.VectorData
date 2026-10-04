@@ -25,11 +25,11 @@ internal sealed class ChromaMapper<TRecord>(CollectionModel model)
         var key = keyProperty.GetValueAsObject(dataModel)
             ?? throw new InvalidOperationException($"Missing key property '{keyProperty.ModelName}' on provided record of type '{typeof(TRecord).Name}'.");
 
-        // Chroma metadata has no null values: a property without a value is not stored.
+        // Chroma metadata has no null values, and Chroma drops empty lists: neither is stored, and both come back as null.
         Dictionary<string, object>? metadata = null;
         foreach (var property in model.DataProperties)
         {
-            if (ChromaFieldMapping.ToMetadataValue(property.GetValueAsObject(dataModel)) is { } value)
+            if (ChromaFieldMapping.ToMetadataValue(property.GetValueAsObject(dataModel)) is { } value and not System.Collections.ICollection { Count: 0 })
             {
                 (metadata ??= []).Add(property.StorageName, value);
             }

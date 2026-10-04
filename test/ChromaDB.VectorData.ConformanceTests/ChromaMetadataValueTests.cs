@@ -49,6 +49,27 @@ public sealed class ChromaMetadataValueTests : IAsyncLifetime
         }
     }
 
+    [Fact]
+    public async Task Empty_list_comes_back_as_null()
+    {
+        var collection = ChromaTestStore.Instance.DefaultVectorStore.GetCollection<string, Record>("metadata-empty-list");
+        await collection.EnsureCollectionDeletedAsync();
+        await collection.EnsureCollectionExistsAsync();
+
+        try
+        {
+            await collection.UpsertAsync(new Record { Key = "a", Tags = [], Vector = new float[] { 1, 2, 3 } });
+            var read = await collection.GetAsync("a");
+
+            Assert.NotNull(read);
+            Assert.Null(read.Tags);
+        }
+        finally
+        {
+            await collection.EnsureCollectionDeletedAsync();
+        }
+    }
+
     public sealed class Record
     {
         [VectorStoreKey]
@@ -59,6 +80,9 @@ public sealed class ChromaMetadataValueTests : IAsyncLifetime
 
         [VectorStoreData]
         public DateTimeOffset Opened { get; set; }
+
+        [VectorStoreData]
+        public List<string>? Tags { get; set; }
 
         [VectorStoreVector(3)]
         public ReadOnlyMemory<float> Vector { get; set; }
