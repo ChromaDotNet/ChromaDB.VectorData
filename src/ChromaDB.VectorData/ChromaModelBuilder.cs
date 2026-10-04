@@ -5,9 +5,9 @@ using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.VectorData.ProviderServices;
 
-namespace CommunityToolkit.VectorData.Qdrant;
+namespace ChromaDB.VectorData;
 
-internal class QdrantModelBuilder(bool hasNamedVectors) : CollectionModelBuilder(GetModelBuildOptions(hasNamedVectors))
+internal class ChromaModelBuilder(bool hasNamedVectors) : CollectionModelBuilder(GetModelBuildOptions(hasNamedVectors))
 {
     internal const string SupportedVectorTypes = "ReadOnlyMemory<float>, Embedding<float>, float[]";
 

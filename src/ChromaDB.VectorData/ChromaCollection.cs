@@ -15,7 +15,7 @@ using Qdrant.Client;
 using Qdrant.Client.Grpc;
 using Microsoft.Shared.Diagnostics;
 
-namespace CommunityToolkit.VectorData.Qdrant;
+namespace ChromaDB.VectorData;
 
 /// <summary>
 /// Service for storing and retrieving vector records, that uses Qdrant as the underlying storage.
@@ -23,7 +23,7 @@ namespace CommunityToolkit.VectorData.Qdrant;
 /// <typeparam name="TKey">The data type of the record key. Can be either <see cref="Guid"/> or <see cref="ulong"/>.</typeparam>
 /// <typeparam name="TRecord">The data model to use for adding, updating and retrieving data from storage.</typeparam>
 #pragma warning disable CA1711 // Identifiers should not have incorrect suffix
-public class QdrantCollection<TKey, TRecord> : VectorStoreCollection<TKey, TRecord>, IKeywordHybridSearchable<TRecord>
+public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TRecord>, IKeywordHybridSearchable<TRecord>
     where TKey : notnull
     where TRecord : class
 #pragma warning restore CA1711 // Identifiers should not have incorrect suffix
@@ -44,55 +44,55 @@ public class QdrantCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
     private const string DeleteName = "Delete";
 
     /// <summary>Qdrant client that can be used to manage the collections and points in a Qdrant store.</summary>
-    private readonly MockableQdrantClient _qdrantClient;
+    private readonly MockableChromaClient _qdrantClient;
 
     /// <summary>The model for this collection.</summary>
     private readonly CollectionModel _model;
 
     /// <summary>A mapper to use for converting between qdrant point and consumer models.</summary>
-    private readonly QdrantMapper<TRecord> _mapper;
+    private readonly ChromaMapper<TRecord> _mapper;
 
     /// <summary>Whether the vectors in the store are named and multiple vectors are supported, or whether there is just a single unnamed vector per qdrant point.</summary>
     private readonly bool _hasNamedVectors;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="QdrantCollection{TKey, TRecord}"/> class.
+    /// Initializes a new instance of the <see cref="ChromaCollection{TKey, TRecord}"/> class.
     /// </summary>
     /// <param name="qdrantClient">Qdrant client that can be used to manage the collections and points in a Qdrant store.</param>
-    /// <param name="name">The name of the collection that this <see cref="QdrantCollection{TKey, TRecord}"/> will access.</param>
+    /// <param name="name">The name of the collection that this <see cref="ChromaCollection{TKey, TRecord}"/> will access.</param>
     /// <param name="ownsClient">A value indicating whether <paramref name="qdrantClient"/> is disposed when the collection is disposed.</param>
     /// <param name="options">Optional configuration options for this class.</param>
     /// <exception cref="ArgumentNullException">Thrown if the <paramref name="qdrantClient"/> is null.</exception>
     /// <exception cref="ArgumentException">Thrown for any misconfigured options.</exception>
-    [RequiresDynamicCode("This constructor is incompatible with NativeAOT. For dynamic mapping via Dictionary<string, object?>, instantiate QdrantDynamicCollection instead.")]
-    [RequiresUnreferencedCode("This constructor is incompatible with trimming. For dynamic mapping via Dictionary<string, object?>, instantiate QdrantDynamicCollection instead")]
-    public QdrantCollection(QdrantClient qdrantClient, string name, bool ownsClient, QdrantCollectionOptions? options = null)
-        : this(() => new MockableQdrantClient(qdrantClient, ownsClient), name, options)
+    [RequiresDynamicCode("This constructor is incompatible with NativeAOT. For dynamic mapping via Dictionary<string, object?>, instantiate ChromaDynamicCollection instead.")]
+    [RequiresUnreferencedCode("This constructor is incompatible with trimming. For dynamic mapping via Dictionary<string, object?>, instantiate ChromaDynamicCollection instead")]
+    public ChromaCollection(QdrantClient qdrantClient, string name, bool ownsClient, ChromaCollectionOptions? options = null)
+        : this(() => new MockableChromaClient(qdrantClient, ownsClient), name, options)
     {
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="QdrantCollection{TKey, TRecord}"/> class.
+    /// Initializes a new instance of the <see cref="ChromaCollection{TKey, TRecord}"/> class.
     /// </summary>
     /// <param name="clientFactory">Qdrant client factory.</param>
-    /// <param name="name">The name of the collection that this <see cref="QdrantCollection{TKey, TRecord}"/> will access.</param>
+    /// <param name="name">The name of the collection that this <see cref="ChromaCollection{TKey, TRecord}"/> will access.</param>
     /// <param name="options">Optional configuration options for this class.</param>
     /// <exception cref="ArgumentNullException">Thrown if the <paramref name="clientFactory"/> is null.</exception>
     /// <exception cref="ArgumentException">Thrown for any misconfigured options.</exception>
-    [RequiresDynamicCode("This constructor is incompatible with NativeAOT. For dynamic mapping via Dictionary<string, object?>, instantiate QdrantDynamicCollection instead.")]
-    [RequiresUnreferencedCode("This constructor is incompatible with trimming. For dynamic mapping via Dictionary<string, object?>, instantiate QdrantDynamicCollection instead")]
-    internal QdrantCollection(Func<MockableQdrantClient> clientFactory, string name, QdrantCollectionOptions? options = null)
+    [RequiresDynamicCode("This constructor is incompatible with NativeAOT. For dynamic mapping via Dictionary<string, object?>, instantiate ChromaDynamicCollection instead.")]
+    [RequiresUnreferencedCode("This constructor is incompatible with trimming. For dynamic mapping via Dictionary<string, object?>, instantiate ChromaDynamicCollection instead")]
+    internal ChromaCollection(Func<MockableChromaClient> clientFactory, string name, ChromaCollectionOptions? options = null)
         : this(
             clientFactory,
             name,
             static options => typeof(TRecord) == typeof(Dictionary<string, object?>)
-                ? throw new NotSupportedException(VectorDataStrings.NonDynamicCollectionWithDictionaryNotSupported(typeof(QdrantDynamicCollection)))
-                : new QdrantModelBuilder(options.HasNamedVectors).Build(typeof(TRecord), typeof(TKey), options.Definition, options.EmbeddingGenerator),
+                ? throw new NotSupportedException(VectorDataStrings.NonDynamicCollectionWithDictionaryNotSupported(typeof(ChromaDynamicCollection)))
+                : new ChromaModelBuilder(options.HasNamedVectors).Build(typeof(TRecord), typeof(TKey), options.Definition, options.EmbeddingGenerator),
             options)
     {
     }
 
-    internal QdrantCollection(Func<MockableQdrantClient> clientFactory, string name, Func<QdrantCollectionOptions, CollectionModel> modelFactory, QdrantCollectionOptions? options)
+    internal ChromaCollection(Func<MockableChromaClient> clientFactory, string name, Func<ChromaCollectionOptions, CollectionModel> modelFactory, ChromaCollectionOptions? options)
     {
         // Verify.
         Throw.IfNull(clientFactory);
@@ -103,18 +103,18 @@ public class QdrantCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
             throw new NotSupportedException("Only ulong and Guid keys are supported.");
         }
 
-        options ??= QdrantCollectionOptions.Default;
+        options ??= ChromaCollectionOptions.Default;
 
         // Assign.
         Name = name;
         _model = modelFactory(options);
 
         _hasNamedVectors = options.HasNamedVectors;
-        _mapper = new QdrantMapper<TRecord>(_model, options.HasNamedVectors);
+        _mapper = new ChromaMapper<TRecord>(_model, options.HasNamedVectors);
 
         _collectionMetadata = new()
         {
-            VectorStoreSystemName = QdrantConstants.VectorStoreSystemName,
+            VectorStoreSystemName = ChromaConstants.VectorStoreSystemName,
             CollectionName = name
         };
 
@@ -158,7 +158,7 @@ public class QdrantCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
                 var singleVectorProperty = _model.VectorProperty;
 
                 // Map the single vector property to the qdrant config.
-                var vectorParams = QdrantCollectionCreateMapping.MapSingleVector(singleVectorProperty!);
+                var vectorParams = ChromaCollectionCreateMapping.MapSingleVector(singleVectorProperty!);
 
                 // Create the collection with the single unnamed vector.
                 await _qdrantClient.CreateCollectionAsync(
@@ -172,7 +172,7 @@ public class QdrantCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
                 var vectorProperties = _model.VectorProperties;
 
                 // Map the named vectors to the qdrant config.
-                var vectorParamsMap = QdrantCollectionCreateMapping.MapNamedVectors(vectorProperties);
+                var vectorParamsMap = ChromaCollectionCreateMapping.MapNamedVectors(vectorProperties);
 
                 // Create the collection with named vectors.
                 await _qdrantClient.CreateCollectionAsync(
@@ -186,12 +186,12 @@ public class QdrantCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
             foreach (var dataProperty in dataProperties)
             {
                 // Note that the schema type doesn't distinguish between array and scalar type (so PayloadSchemaType.Integer is used for both integer and array of integers)
-                if (QdrantCollectionCreateMapping.s_schemaTypeMap.TryGetValue(dataProperty.Type, out PayloadSchemaType schemaType)
+                if (ChromaCollectionCreateMapping.s_schemaTypeMap.TryGetValue(dataProperty.Type, out PayloadSchemaType schemaType)
                     || dataProperty.Type.IsArray
-                        && QdrantCollectionCreateMapping.s_schemaTypeMap.TryGetValue(dataProperty.Type.GetElementType()!, out schemaType)
+                        && ChromaCollectionCreateMapping.s_schemaTypeMap.TryGetValue(dataProperty.Type.GetElementType()!, out schemaType)
                     || dataProperty.Type.IsGenericType
                         && dataProperty.Type.GetGenericTypeDefinition() == typeof(List<>)
-                        && QdrantCollectionCreateMapping.s_schemaTypeMap.TryGetValue(dataProperty.Type.GenericTypeArguments[0], out schemaType))
+                        && ChromaCollectionCreateMapping.s_schemaTypeMap.TryGetValue(dataProperty.Type.GenericTypeArguments[0], out schemaType))
                 {
                     await _qdrantClient.CreatePayloadIndexAsync(
                         Name,
@@ -202,7 +202,7 @@ public class QdrantCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
                 else
                 {
                     // TODO: This should move to model validation
-                    throw new InvalidOperationException($"Property {nameof(VectorStoreDataProperty.IsIndexed)} on {nameof(VectorStoreDataProperty)} '{dataProperty.ModelName}' is set to true, but the property type {dataProperty.Type.Name} is not supported for filtering. The Qdrant VectorStore supports filtering on {string.Join(", ", QdrantCollectionCreateMapping.s_schemaTypeMap.Keys.Select(x => x.Name))} properties only.");
+                    throw new InvalidOperationException($"Property {nameof(VectorStoreDataProperty.IsIndexed)} on {nameof(VectorStoreDataProperty)} '{dataProperty.ModelName}' is set to true, but the property type {dataProperty.Type.Name} is not supported for filtering. The Qdrant VectorStore supports filtering on {string.Join(", ", ChromaCollectionCreateMapping.s_schemaTypeMap.Keys.Select(x => x.Name))} properties only.");
                 }
             }
 
@@ -231,7 +231,7 @@ public class QdrantCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
         {
             throw new VectorStoreException("Call to vector store failed.", ex)
             {
-                VectorStoreSystemName = QdrantConstants.VectorStoreSystemName,
+                VectorStoreSystemName = ChromaConstants.VectorStoreSystemName,
                 VectorStoreName = _collectionMetadata.VectorStoreName,
                 CollectionName = Name,
                 OperationName = "EnsureCollectionExists"
@@ -466,7 +466,7 @@ public class QdrantCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
         {
             var vectorProperty = _model.VectorProperties[i];
 
-            if (QdrantModelBuilder.IsVectorPropertyTypeValidCore(vectorProperty.Type, out _))
+            if (ChromaModelBuilder.IsVectorPropertyTypeValidCore(vectorProperty.Type, out _))
             {
                 continue;
             }
@@ -540,7 +540,7 @@ public class QdrantCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
 
         // Build filter object.
         var filter = options.Filter is not null
-            ? new QdrantFilterTranslator().Translate(options.Filter, _model)
+            ? new ChromaFilterTranslator().Translate(options.Filter, _model)
             : new Filter();
 
         // Specify whether to include vectors in the search results.
@@ -562,11 +562,11 @@ public class QdrantCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
 
         // Map to data model.
-        var mappedResults = points.Select(point => QdrantCollectionSearchMapping.MapScoredPointToVectorSearchResult(
+        var mappedResults = points.Select(point => ChromaCollectionSearchMapping.MapScoredPointToVectorSearchResult(
                 point,
                 _mapper,
                 options.IncludeVectors,
-                QdrantConstants.VectorStoreSystemName,
+                ChromaConstants.VectorStoreSystemName,
                 _collectionMetadata.VectorStoreName,
                 Name,
                 "Query"));
@@ -593,7 +593,7 @@ public class QdrantCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
                 => ((Embedding<float>)await vectorProperty.GenerateEmbeddingAsync(searchValue, cancellationToken).ConfigureAwait(false)).Vector,
 
             _ => vectorProperty.EmbeddingGenerator is null
-                ? throw new NotSupportedException(VectorDataStrings.InvalidSearchInputAndNoEmbeddingGeneratorWasConfigured(searchValue.GetType(), QdrantModelBuilder.SupportedVectorTypes))
+                ? throw new NotSupportedException(VectorDataStrings.InvalidSearchInputAndNoEmbeddingGeneratorWasConfigured(searchValue.GetType(), ChromaModelBuilder.SupportedVectorTypes))
                 : throw new InvalidOperationException(VectorDataStrings.IncompatibleEmbeddingGeneratorWasConfiguredForInputType(typeof(TInput), vectorProperty.EmbeddingGenerator.GetType()))
         };
 
@@ -613,7 +613,7 @@ public class QdrantCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
 
         options ??= new();
 
-        var translatedFilter = new QdrantFilterTranslator().Translate(filter, _model);
+        var translatedFilter = new ChromaFilterTranslator().Translate(filter, _model);
 
         // Specify whether to include vectors in the search results.
         WithVectorsSelector vectorsSelector = new() { Enable = options.IncludeVectors };
@@ -646,11 +646,11 @@ public class QdrantCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
                 orderBy,
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
 
-        var mappedResults = scrollResponse.Result.Skip(options.Skip).Select(point => QdrantCollectionSearchMapping.MapRetrievedPointToRecord(
+        var mappedResults = scrollResponse.Result.Skip(options.Skip).Select(point => ChromaCollectionSearchMapping.MapRetrievedPointToRecord(
                 point,
                 _mapper,
                 options.IncludeVectors,
-                QdrantConstants.VectorStoreSystemName,
+                ChromaConstants.VectorStoreSystemName,
                 _collectionMetadata.VectorStoreName,
                 Name,
                 "Scroll"));
@@ -675,7 +675,7 @@ public class QdrantCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
 
         // Build filter object.
         var filter = options.Filter is not null
-            ? new QdrantFilterTranslator().Translate(options.Filter, _model)
+            ? new ChromaFilterTranslator().Translate(options.Filter, _model)
             : new Filter();
 
         // Specify whether to include vectors in the search results.
@@ -726,11 +726,11 @@ public class QdrantCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
 
         // Map to data model.
-        var mappedResults = points.Select(point => QdrantCollectionSearchMapping.MapScoredPointToVectorSearchResult(
+        var mappedResults = points.Select(point => ChromaCollectionSearchMapping.MapScoredPointToVectorSearchResult(
                 point,
                 _mapper,
                 options.IncludeVectors,
-                QdrantConstants.VectorStoreSystemName,
+                ChromaConstants.VectorStoreSystemName,
                 _collectionMetadata.VectorStoreName,
                 Name,
                 "Query"));

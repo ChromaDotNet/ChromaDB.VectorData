@@ -3,9 +3,9 @@
 
 using VectorData.ConformanceTests.Support;
 
-namespace Qdrant.ConformanceTests.Support;
+namespace ChromaDB.VectorData.ConformanceTests.Support;
 
-public class QdrantUnnamedVectorFixture : VectorStoreFixture
+public class ChromaUnnamedVectorFixture : VectorStoreFixture
 {
-    public override TestStore TestStore => QdrantTestStore.UnnamedVectorInstance;
+    public override TestStore TestStore => ChromaTestStore.UnnamedVectorInstance;
 }

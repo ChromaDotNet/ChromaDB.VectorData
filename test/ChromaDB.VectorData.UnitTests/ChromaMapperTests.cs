@@ -6,16 +6,16 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.VectorData;
-using CommunityToolkit.VectorData.Qdrant;
+using ChromaDB.VectorData;
 using Qdrant.Client.Grpc;
 using Xunit;
 
-namespace Qdrant.UnitTests;
+namespace ChromaDB.VectorData.UnitTests;
 
 /// <summary>
-/// Contains tests for the <see cref="QdrantMapper{TConsumerDataModel}"/> class.
+/// Contains tests for the <see cref="ChromaMapper{TConsumerDataModel}"/> class.
 /// </summary>
-public class QdrantMapperTests
+public class ChromaMapperTests
 {
     [Theory]
     [InlineData(true)]
@@ -24,9 +24,9 @@ public class QdrantMapperTests
     {
         // Arrange.
         var definition = CreateSinglePropsVectorStoreRecordDefinition(typeof(ulong));
-        var model = new QdrantModelBuilder(hasNamedVectors)
+        var model = new ChromaModelBuilder(hasNamedVectors)
             .Build(typeof(SinglePropsModel<ulong>), typeof(ulong), definition, defaultEmbeddingGenerator: null);
-        var sut = new QdrantMapper<SinglePropsModel<ulong>>(model, hasNamedVectors);
+        var sut = new ChromaMapper<SinglePropsModel<ulong>>(model, hasNamedVectors);
 
         // Act.
         var actual = sut.MapFromDataToStorageModel(CreateSinglePropsModel<ulong>(5ul), recordIndex: 0, generatedEmbeddings: null);
@@ -54,9 +54,9 @@ public class QdrantMapperTests
     {
         // Arrange.
         var definition = CreateSinglePropsVectorStoreRecordDefinition(typeof(Guid));
-        var model = new QdrantModelBuilder(hasNamedVectors)
+        var model = new ChromaModelBuilder(hasNamedVectors)
             .Build(typeof(SinglePropsModel<Guid>), typeof(Guid), definition, defaultEmbeddingGenerator: null);
-        var sut = new QdrantMapper<SinglePropsModel<Guid>>(model, hasNamedVectors);
+        var sut = new ChromaMapper<SinglePropsModel<Guid>>(model, hasNamedVectors);
 
         // Act.
         var actual = sut.MapFromDataToStorageModel(CreateSinglePropsModel<Guid>(Guid.Parse("11111111-1111-1111-1111-111111111111")), recordIndex: 0, generatedEmbeddings: null);
@@ -77,9 +77,9 @@ public class QdrantMapperTests
     {
         // Arrange.
         var definition = CreateSinglePropsVectorStoreRecordDefinition(typeof(ulong));
-        var model = new QdrantModelBuilder(hasNamedVectors)
+        var model = new ChromaModelBuilder(hasNamedVectors)
             .Build(typeof(SinglePropsModel<ulong>), typeof(ulong), definition, defaultEmbeddingGenerator: null);
-        var sut = new QdrantMapper<SinglePropsModel<ulong>>(model, hasNamedVectors);
+        var sut = new ChromaMapper<SinglePropsModel<ulong>>(model, hasNamedVectors);
 
         // Act.
         var point = CreateSinglePropsPointStruct(5, hasNamedVectors);
@@ -109,9 +109,9 @@ public class QdrantMapperTests
     {
         // Arrange.
         var definition = CreateSinglePropsVectorStoreRecordDefinition(typeof(Guid));
-        var model = new QdrantModelBuilder(hasNamedVectors)
+        var model = new ChromaModelBuilder(hasNamedVectors)
             .Build(typeof(SinglePropsModel<Guid>), typeof(Guid), definition, defaultEmbeddingGenerator: null);
-        var sut = new QdrantMapper<SinglePropsModel<Guid>>(model, hasNamedVectors);
+        var sut = new ChromaMapper<SinglePropsModel<Guid>>(model, hasNamedVectors);
 
         // Act.
         var point = CreateSinglePropsPointStruct(Guid.Parse("11111111-1111-1111-1111-111111111111"), hasNamedVectors);
@@ -137,10 +137,10 @@ public class QdrantMapperTests
     {
         // Arrange.
         var definition = CreateMultiPropsVectorStoreRecordDefinition(typeof(ulong));
-        var model = new QdrantModelBuilder(hasNamedVectors: true)
+        var model = new ChromaModelBuilder(hasNamedVectors: true)
             .Build(typeof(MultiPropsModel<ulong>), typeof(ulong), definition, defaultEmbeddingGenerator: null);
 
-        var sut = new QdrantMapper<MultiPropsModel<ulong>>(model, hasNamedVectors: true);
+        var sut = new ChromaMapper<MultiPropsModel<ulong>>(model, hasNamedVectors: true);
 
         // Act.
         var actual = sut.MapFromDataToStorageModel(CreateMultiPropsModel<ulong>(5ul), recordIndex: 0, generatedEmbeddings: null);
@@ -166,9 +166,9 @@ public class QdrantMapperTests
     {
         // Arrange.
         var definition = CreateMultiPropsVectorStoreRecordDefinition(typeof(Guid));
-        var model = new QdrantModelBuilder(hasNamedVectors: true)
+        var model = new ChromaModelBuilder(hasNamedVectors: true)
             .Build(typeof(MultiPropsModel<Guid>), typeof(Guid), definition, defaultEmbeddingGenerator: null);
-        var sut = new QdrantMapper<MultiPropsModel<Guid>>(model, hasNamedVectors: true);
+        var sut = new ChromaMapper<MultiPropsModel<Guid>>(model, hasNamedVectors: true);
 
         // Act.
         var actual = sut.MapFromDataToStorageModel(CreateMultiPropsModel<Guid>(Guid.Parse("11111111-1111-1111-1111-111111111111")), recordIndex: 0, generatedEmbeddings: null);
@@ -196,9 +196,9 @@ public class QdrantMapperTests
     {
         // Arrange.
         var definition = CreateMultiPropsVectorStoreRecordDefinition(typeof(ulong));
-        var model = new QdrantModelBuilder(hasNamedVectors: true)
+        var model = new ChromaModelBuilder(hasNamedVectors: true)
             .Build(typeof(MultiPropsModel<ulong>), typeof(ulong), definition, defaultEmbeddingGenerator: null);
-        var sut = new QdrantMapper<MultiPropsModel<ulong>>(model, hasNamedVectors: true);
+        var sut = new ChromaMapper<MultiPropsModel<ulong>>(model, hasNamedVectors: true);
 
         // Act.
         var point = CreateMultiPropsPointStruct(5);
@@ -235,9 +235,9 @@ public class QdrantMapperTests
     {
         // Arrange.
         var definition = CreateMultiPropsVectorStoreRecordDefinition(typeof(Guid));
-        var model = new QdrantModelBuilder(hasNamedVectors: true)
+        var model = new ChromaModelBuilder(hasNamedVectors: true)
             .Build(typeof(MultiPropsModel<Guid>), typeof(Guid), definition, defaultEmbeddingGenerator: null);
-        var sut = new QdrantMapper<MultiPropsModel<Guid>>(model, hasNamedVectors: true);
+        var sut = new ChromaMapper<MultiPropsModel<Guid>>(model, hasNamedVectors: true);
 
         // Act.
         var point = CreateMultiPropsPointStruct(Guid.Parse("11111111-1111-1111-1111-111111111111"));

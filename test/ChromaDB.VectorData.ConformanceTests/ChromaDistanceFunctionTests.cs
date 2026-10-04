@@ -1,15 +1,15 @@
 ﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using Qdrant.ConformanceTests.Support;
+using ChromaDB.VectorData.ConformanceTests.Support;
 using VectorData.ConformanceTests;
 using VectorData.ConformanceTests.Support;
 using Xunit;
 
-namespace Qdrant.ConformanceTests;
+namespace ChromaDB.VectorData.ConformanceTests;
 
-public class QdrantDistanceFunctionTests(QdrantDistanceFunctionTests.Fixture fixture)
-    : DistanceFunctionTests<ulong>(fixture), IClassFixture<QdrantDistanceFunctionTests.Fixture>
+public class ChromaDistanceFunctionTests(ChromaDistanceFunctionTests.Fixture fixture)
+    : DistanceFunctionTests<ulong>(fixture), IClassFixture<ChromaDistanceFunctionTests.Fixture>
 {
     public override Task CosineDistance() => Assert.ThrowsAsync<NotSupportedException>(base.CosineDistance);
     public override Task NegativeDotProductSimilarity() => Assert.ThrowsAsync<NotSupportedException>(base.NegativeDotProductSimilarity);
@@ -18,6 +18,6 @@ public class QdrantDistanceFunctionTests(QdrantDistanceFunctionTests.Fixture fix
 
     public new class Fixture() : DistanceFunctionTests<ulong>.Fixture
     {
-        public override TestStore TestStore => QdrantTestStore.NamedVectorsInstance;
+        public override TestStore TestStore => ChromaTestStore.NamedVectorsInstance;
     }
 }

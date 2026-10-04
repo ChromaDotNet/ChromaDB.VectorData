@@ -3,23 +3,23 @@
 
 using Microsoft.Extensions.AI;
 
-namespace CommunityToolkit.VectorData.Qdrant;
+namespace ChromaDB.VectorData;
 
 /// <summary>
-/// Options when creating a <see cref="QdrantVectorStore"/>.
+/// Options when creating a <see cref="ChromaVectorStore"/>.
 /// </summary>
-public sealed class QdrantVectorStoreOptions
+public sealed class ChromaVectorStoreOptions
 {
-    internal static readonly QdrantVectorStoreOptions Default = new();
+    internal static readonly ChromaVectorStoreOptions Default = new();
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="QdrantVectorStoreOptions"/> class.
+    /// Initializes a new instance of the <see cref="ChromaVectorStoreOptions"/> class.
     /// </summary>
-    public QdrantVectorStoreOptions()
+    public ChromaVectorStoreOptions()
     {
     }
 
-    internal QdrantVectorStoreOptions(QdrantVectorStoreOptions? source)
+    internal ChromaVectorStoreOptions(ChromaVectorStoreOptions? source)
     {
         HasNamedVectors = source?.HasNamedVectors ?? Default.HasNamedVectors;
         EmbeddingGenerator = source?.EmbeddingGenerator;

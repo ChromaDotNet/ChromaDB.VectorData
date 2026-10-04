@@ -3,23 +3,23 @@
 
 using Microsoft.Extensions.VectorData;
 
-namespace CommunityToolkit.VectorData.Qdrant;
+namespace ChromaDB.VectorData;
 
 /// <summary>
-/// Options when creating a <see cref="QdrantCollection{TKey, TRecord}"/>.
+/// Options when creating a <see cref="ChromaCollection{TKey, TRecord}"/>.
 /// </summary>
-public sealed class QdrantCollectionOptions : VectorStoreCollectionOptions
+public sealed class ChromaCollectionOptions : VectorStoreCollectionOptions
 {
-    internal static readonly QdrantCollectionOptions Default = new();
+    internal static readonly ChromaCollectionOptions Default = new();
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="QdrantCollectionOptions"/> class.
+    /// Initializes a new instance of the <see cref="ChromaCollectionOptions"/> class.
     /// </summary>
-    public QdrantCollectionOptions()
+    public ChromaCollectionOptions()
     {
     }
 
-    internal QdrantCollectionOptions(QdrantCollectionOptions? source) : base(source)
+    internal ChromaCollectionOptions(ChromaCollectionOptions? source) : base(source)
     {
         HasNamedVectors = source?.HasNamedVectors ?? Default.HasNamedVectors;
     }

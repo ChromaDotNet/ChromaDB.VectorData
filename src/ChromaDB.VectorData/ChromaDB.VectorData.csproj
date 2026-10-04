@@ -2,12 +2,12 @@
   
   <PropertyGroup>
     <Version>1.0.0</Version>
-    <AssemblyName>CommunityToolkit.VectorData.Qdrant</AssemblyName>
+    <AssemblyName>ChromaDB.VectorData</AssemblyName>
     <RootNamespace>$(AssemblyName)</RootNamespace>
     <TargetFrameworks>net10.0;net8.0;netstandard2.0;net462</TargetFrameworks>
     <IsAotCompatible Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">true</IsAotCompatible>
 
-    <Title>Qdrant provider for Microsoft.Extensions.VectorData</Title>
+    <Title>Chroma provider for Microsoft.Extensions.VectorData</Title>
     <Description>Qdrant provider for Microsoft.Extensions.VectorData by the .NET Community Toolkit</Description>
   </PropertyGroup>
   
@@ -23,7 +23,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <InternalsVisibleTo Include="CommunityToolkit.VectorData.Qdrant.UnitTests" />
+    <InternalsVisibleTo Include="ChromaDB.VectorData.UnitTests" />
     <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
   </ItemGroup>
 

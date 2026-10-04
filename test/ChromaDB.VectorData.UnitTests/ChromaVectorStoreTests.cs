@@ -9,43 +9,43 @@ using Microsoft.Extensions.VectorData;
 using Moq;
 using Xunit;
 
-namespace CommunityToolkit.VectorData.Qdrant.UnitTests;
+namespace ChromaDB.VectorData.UnitTests;
 
 /// <summary>
-/// Contains tests for the <see cref="QdrantVectorStore"/> class.
+/// Contains tests for the <see cref="ChromaVectorStore"/> class.
 /// </summary>
-public class QdrantVectorStoreTests
+public class ChromaVectorStoreTests
 {
     private const string TestCollectionName = "testcollection";
 
-    private readonly Mock<MockableQdrantClient> _qdrantClientMock;
+    private readonly Mock<MockableChromaClient> _qdrantClientMock;
 
     private readonly CancellationToken _testCancellationToken = new(false);
 
-    public QdrantVectorStoreTests()
+    public ChromaVectorStoreTests()
     {
-        this._qdrantClientMock = new Mock<MockableQdrantClient>(MockBehavior.Strict);
+        this._qdrantClientMock = new Mock<MockableChromaClient>(MockBehavior.Strict);
     }
 
     [Fact]
     public void GetCollectionReturnsCollection()
     {
         // Arrange.
-        using var sut = new QdrantVectorStore(this._qdrantClientMock.Object);
+        using var sut = new ChromaVectorStore(this._qdrantClientMock.Object);
 
         // Act.
         var actual = sut.GetCollection<ulong, SinglePropsModel<ulong>>(TestCollectionName);
 
         // Assert.
         Assert.NotNull(actual);
-        Assert.IsType<QdrantCollection<ulong, SinglePropsModel<ulong>>>(actual);
+        Assert.IsType<ChromaCollection<ulong, SinglePropsModel<ulong>>>(actual);
     }
 
     [Fact]
     public void GetCollectionThrowsForInvalidKeyType()
     {
         // Arrange.
-        using var sut = new QdrantVectorStore(this._qdrantClientMock.Object);
+        using var sut = new ChromaVectorStore(this._qdrantClientMock.Object);
 
         // Act & Assert.
         Assert.Throws<NotSupportedException>(() => sut.GetCollection<string, SinglePropsModel<string>>(TestCollectionName));
@@ -58,7 +58,7 @@ public class QdrantVectorStoreTests
         this._qdrantClientMock
             .Setup(x => x.ListCollectionsAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { "collection1", "collection2" });
-        using var sut = new QdrantVectorStore(this._qdrantClientMock.Object);
+        using var sut = new ChromaVectorStore(this._qdrantClientMock.Object);
 
         // Act.
         var collectionNames = sut.ListCollectionNamesAsync(this._testCancellationToken);

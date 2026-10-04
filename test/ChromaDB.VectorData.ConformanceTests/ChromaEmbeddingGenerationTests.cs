@@ -4,57 +4,57 @@
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.VectorData;
-using Qdrant.ConformanceTests.Support;
+using ChromaDB.VectorData.ConformanceTests.Support;
 using VectorData.ConformanceTests;
 using VectorData.ConformanceTests.Support;
 using Xunit;
 
-namespace Qdrant.ConformanceTests;
+namespace ChromaDB.VectorData.ConformanceTests;
 
-public class QdrantEmbeddingGenerationTests(QdrantEmbeddingGenerationTests.StringVectorFixture stringVectorFixture, QdrantEmbeddingGenerationTests.RomOfFloatVectorFixture romOfFloatVectorFixture)
-    : EmbeddingGenerationTests<Guid>(stringVectorFixture, romOfFloatVectorFixture), IClassFixture<QdrantEmbeddingGenerationTests.StringVectorFixture>, IClassFixture<QdrantEmbeddingGenerationTests.RomOfFloatVectorFixture>
+public class ChromaEmbeddingGenerationTests(ChromaEmbeddingGenerationTests.StringVectorFixture stringVectorFixture, ChromaEmbeddingGenerationTests.RomOfFloatVectorFixture romOfFloatVectorFixture)
+    : EmbeddingGenerationTests<Guid>(stringVectorFixture, romOfFloatVectorFixture), IClassFixture<ChromaEmbeddingGenerationTests.StringVectorFixture>, IClassFixture<ChromaEmbeddingGenerationTests.RomOfFloatVectorFixture>
 {
     public new class StringVectorFixture : EmbeddingGenerationTests<Guid>.StringVectorFixture
     {
-        public override TestStore TestStore => QdrantTestStore.UnnamedVectorInstance;
+        public override TestStore TestStore => ChromaTestStore.UnnamedVectorInstance;
 
         public override VectorStore CreateVectorStore(IEmbeddingGenerator? embeddingGenerator)
-            => QdrantTestStore.UnnamedVectorInstance.GetVectorStore(new() { EmbeddingGenerator = embeddingGenerator });
+            => ChromaTestStore.UnnamedVectorInstance.GetVectorStore(new() { EmbeddingGenerator = embeddingGenerator });
 
         public override Func<IServiceCollection, IServiceCollection>[] DependencyInjectionStoreRegistrationDelegates =>
         [
             services => services
-                .AddSingleton(QdrantTestStore.UnnamedVectorInstance.Client)
-                .AddQdrantVectorStore()
+                .AddSingleton(ChromaTestStore.UnnamedVectorInstance.Client)
+                .AddChromaVectorStore()
         ];
 
         public override Func<IServiceCollection, IServiceCollection>[] DependencyInjectionCollectionRegistrationDelegates =>
         [
             services => services
-                .AddSingleton(QdrantTestStore.UnnamedVectorInstance.Client)
-                .AddQdrantCollection<Guid, RecordWithAttributes>(this.CollectionName)
+                .AddSingleton(ChromaTestStore.UnnamedVectorInstance.Client)
+                .AddChromaCollection<Guid, RecordWithAttributes>(this.CollectionName)
         ];
     }
 
     public new class RomOfFloatVectorFixture : EmbeddingGenerationTests<Guid>.RomOfFloatVectorFixture
     {
-        public override TestStore TestStore => QdrantTestStore.UnnamedVectorInstance;
+        public override TestStore TestStore => ChromaTestStore.UnnamedVectorInstance;
 
         public override VectorStore CreateVectorStore(IEmbeddingGenerator? embeddingGenerator)
-            => QdrantTestStore.UnnamedVectorInstance.GetVectorStore(new() { EmbeddingGenerator = embeddingGenerator });
+            => ChromaTestStore.UnnamedVectorInstance.GetVectorStore(new() { EmbeddingGenerator = embeddingGenerator });
 
         public override Func<IServiceCollection, IServiceCollection>[] DependencyInjectionStoreRegistrationDelegates =>
         [
             services => services
-                .AddSingleton(QdrantTestStore.UnnamedVectorInstance.Client)
-                .AddQdrantVectorStore()
+                .AddSingleton(ChromaTestStore.UnnamedVectorInstance.Client)
+                .AddChromaVectorStore()
         ];
 
         public override Func<IServiceCollection, IServiceCollection>[] DependencyInjectionCollectionRegistrationDelegates =>
         [
             services => services
-                .AddSingleton(QdrantTestStore.UnnamedVectorInstance.Client)
-                .AddQdrantCollection<Guid, RecordWithAttributes>(this.CollectionName)
+                .AddSingleton(ChromaTestStore.UnnamedVectorInstance.Client)
+                .AddChromaCollection<Guid, RecordWithAttributes>(this.CollectionName)
         ];
     }
 }

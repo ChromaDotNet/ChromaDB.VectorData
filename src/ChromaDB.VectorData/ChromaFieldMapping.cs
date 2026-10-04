@@ -6,12 +6,12 @@ using System.Diagnostics;
 using System.Globalization;
 using Qdrant.Client.Grpc;
 
-namespace CommunityToolkit.VectorData.Qdrant;
+namespace ChromaDB.VectorData;
 
 /// <summary>
 /// Contains helper methods for mapping fields to and from the format required by the Qdrant client sdk.
 /// </summary>
-internal static class QdrantFieldMapping
+internal static class ChromaFieldMapping
 {
     /// <summary>
     /// Convert the given <paramref name="payloadValue"/> to the correct native type based on its properties.

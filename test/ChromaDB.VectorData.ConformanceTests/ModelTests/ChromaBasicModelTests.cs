@@ -1,15 +1,15 @@
 ﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using Qdrant.ConformanceTests.Support;
+using ChromaDB.VectorData.ConformanceTests.Support;
 using VectorData.ConformanceTests.ModelTests;
 using VectorData.ConformanceTests.Support;
 using Xunit;
 
-namespace Qdrant.ConformanceTests.ModelTests;
+namespace ChromaDB.VectorData.ConformanceTests.ModelTests;
 
-public class QdrantBasicModelTests(QdrantBasicModelTests.Fixture fixture)
-    : BasicModelTests<ulong>(fixture), IClassFixture<QdrantBasicModelTests.Fixture>
+public class ChromaBasicModelTests(ChromaBasicModelTests.Fixture fixture)
+    : BasicModelTests<ulong>(fixture), IClassFixture<ChromaBasicModelTests.Fixture>
 {
     public override async Task GetAsync_with_filter_and_multiple_OrderBys()
     {
@@ -20,6 +20,6 @@ public class QdrantBasicModelTests(QdrantBasicModelTests.Fixture fixture)
 
     public new class Fixture : BasicModelTests<ulong>.Fixture
     {
-        public override TestStore TestStore => QdrantTestStore.NamedVectorsInstance;
+        public override TestStore TestStore => ChromaTestStore.NamedVectorsInstance;
     }
 }

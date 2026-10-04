@@ -6,12 +6,12 @@ using Microsoft.Extensions.VectorData;
 using Qdrant.Client.Grpc;
 using Xunit;
 
-namespace CommunityToolkit.VectorData.Qdrant.UnitTests;
+namespace ChromaDB.VectorData.UnitTests;
 
 /// <summary>
-/// Contains tests for the <see cref="QdrantCollectionSearchMapping"/> class.
+/// Contains tests for the <see cref="ChromaCollectionSearchMapping"/> class.
 /// </summary>
-public class QdrantCollectionSearchMappingTests
+public class ChromaCollectionSearchMappingTests
 {
     [Fact]
     public void MapScoredPointToVectorSearchResultMapsResults()
@@ -27,7 +27,7 @@ public class QdrantCollectionSearchMappingTests
             Score = 0.5f
         };
 
-        var model = new QdrantModelBuilder(hasNamedVectors: false)
+        var model = new ChromaModelBuilder(hasNamedVectors: false)
             .Build(
                 typeof(DataModel),
                 typeof(ulong),
@@ -42,10 +42,10 @@ public class QdrantCollectionSearchMappingTests
                 },
                 defaultEmbeddingGenerator: null);
 
-        var mapper = new QdrantMapper<DataModel>(model, hasNamedVectors: false);
+        var mapper = new ChromaMapper<DataModel>(model, hasNamedVectors: false);
 
         // Act.
-        var actual = QdrantCollectionSearchMapping.MapScoredPointToVectorSearchResult<DataModel>(scoredPoint, mapper, true, "Qdrant", "myvectorstore", "mycollection", "query");
+        var actual = ChromaCollectionSearchMapping.MapScoredPointToVectorSearchResult<DataModel>(scoredPoint, mapper, true, "Qdrant", "myvectorstore", "mycollection", "query");
 
         // Assert.
         Assert.Equal(1ul, actual.Record.Id);

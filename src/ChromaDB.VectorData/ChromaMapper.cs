@@ -7,13 +7,13 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.VectorData.ProviderServices;
 using Qdrant.Client.Grpc;
 
-namespace CommunityToolkit.VectorData.Qdrant;
+namespace ChromaDB.VectorData;
 
 /// <summary>
 /// Mapper between a Qdrant record and the consumer data model that uses json as an intermediary to allow supporting a wide range of models.
 /// </summary>
 /// <typeparam name="TRecord">The consumer data model to map to or from.</typeparam>
-internal sealed class QdrantMapper<TRecord>(CollectionModel model, bool hasNamedVectors)
+internal sealed class ChromaMapper<TRecord>(CollectionModel model, bool hasNamedVectors)
     where TRecord : class
 {
     /// <inheritdoc />
@@ -47,7 +47,7 @@ internal sealed class QdrantMapper<TRecord>(CollectionModel model, bool hasNamed
         foreach (var property in model.DataProperties)
         {
             var propertyValue = property.GetValueAsObject(dataModel!);
-            pointStruct.Payload.Add(property.StorageName, QdrantFieldMapping.ConvertToGrpcFieldValue(propertyValue));
+            pointStruct.Payload.Add(property.StorageName, ChromaFieldMapping.ConvertToGrpcFieldValue(propertyValue));
         }
 
         // Add vectors.
@@ -159,7 +159,7 @@ internal sealed class QdrantMapper<TRecord>(CollectionModel model, bool hasNamed
             {
                 dataProperty.SetValueAsObject(
                     outputRecord,
-                    QdrantFieldMapping.Deserialize(fieldValue, dataProperty.Type));
+                    ChromaFieldMapping.Deserialize(fieldValue, dataProperty.Type));
             }
         }
 

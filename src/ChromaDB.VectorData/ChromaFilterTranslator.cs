@@ -12,10 +12,10 @@ using Qdrant.Client.Grpc;
 using Expression = System.Linq.Expressions.Expression;
 using Range = Qdrant.Client.Grpc.Range;
 
-namespace CommunityToolkit.VectorData.Qdrant;
+namespace ChromaDB.VectorData;
 
 // https://qdrant.tech/documentation/concepts/filtering
-internal class QdrantFilterTranslator : FilterTranslatorBase
+internal class ChromaFilterTranslator : FilterTranslatorBase
 {
     internal Filter Translate(LambdaExpression lambdaExpression, CollectionModel model)
     {

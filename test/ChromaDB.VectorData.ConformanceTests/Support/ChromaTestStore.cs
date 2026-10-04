@@ -2,19 +2,19 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using Microsoft.Extensions.VectorData;
-using CommunityToolkit.VectorData.Qdrant;
+using ChromaDB.VectorData;
 using Qdrant.Client;
 using Testcontainers.Qdrant;
 using VectorData.ConformanceTests.Support;
 
-namespace Qdrant.ConformanceTests.Support;
+namespace ChromaDB.VectorData.ConformanceTests.Support;
 
 #pragma warning disable CA1001 // Type owns disposable fields but is not disposable
 
-internal sealed class QdrantTestStore : TestStore
+internal sealed class ChromaTestStore : TestStore
 {
-    public static QdrantTestStore NamedVectorsInstance { get; } = new(hasNamedVectors: true);
-    public static QdrantTestStore UnnamedVectorInstance { get; } = new(hasNamedVectors: false);
+    public static ChromaTestStore NamedVectorsInstance { get; } = new(hasNamedVectors: true);
+    public static ChromaTestStore UnnamedVectorInstance { get; } = new(hasNamedVectors: false);
 
     // Qdrant doesn't support the default Flat index kind
     public override string DefaultIndexKind => IndexKind.Hnsw;
@@ -25,7 +25,7 @@ internal sealed class QdrantTestStore : TestStore
 
     public QdrantClient Client => this._client ?? throw new InvalidOperationException("Not initialized");
 
-    public QdrantVectorStore GetVectorStore(QdrantVectorStoreOptions options)
+    public ChromaVectorStore GetVectorStore(ChromaVectorStoreOptions options)
         => new(this.Client,
             ownsClient: false, // The client is shared, it's not owned by the vector store.
             new()
@@ -34,7 +34,7 @@ internal sealed class QdrantTestStore : TestStore
                 EmbeddingGenerator = options.EmbeddingGenerator
             });
 
-    private QdrantTestStore(bool hasNamedVectors) => this._hasNamedVectors = hasNamedVectors;
+    private ChromaTestStore(bool hasNamedVectors) => this._hasNamedVectors = hasNamedVectors;
 
     /// <summary>
     /// Qdrant normalizes vectors on upsert, so we cannot compare
@@ -49,7 +49,7 @@ internal sealed class QdrantTestStore : TestStore
         await this._container.StartAsync();
         this._client = new QdrantClient(this._container.Hostname, this._container.GetMappedPublicPort(QdrantBuilder.QdrantGrpcPort));
         // The client is shared, it's not owned by the vector store.
-        this.DefaultVectorStore = new QdrantVectorStore(this._client, ownsClient: false, new() { HasNamedVectors = this._hasNamedVectors });
+        this.DefaultVectorStore = new ChromaVectorStore(this._client, ownsClient: false, new() { HasNamedVectors = this._hasNamedVectors });
     }
 
     protected override async Task StopAsync()

@@ -4,12 +4,12 @@
 using Microsoft.Extensions.VectorData;
 using Qdrant.Client.Grpc;
 
-namespace CommunityToolkit.VectorData.Qdrant;
+namespace ChromaDB.VectorData;
 
 /// <summary>
 /// Contains mapping helpers to use when searching for documents using Qdrant.
 /// </summary>
-internal static class QdrantCollectionSearchMapping
+internal static class ChromaCollectionSearchMapping
 {
     /// <summary>
     /// Map the given <see cref="ScoredPoint"/> to a <see cref="VectorSearchResult{TRecord}"/>.
@@ -25,7 +25,7 @@ internal static class QdrantCollectionSearchMapping
     /// <returns>The mapped <see cref="VectorSearchResult{TRecord}"/>.</returns>
     public static VectorSearchResult<TRecord> MapScoredPointToVectorSearchResult<TRecord>(
         ScoredPoint point,
-        QdrantMapper<TRecord> mapper,
+        ChromaMapper<TRecord> mapper,
         bool includeVectors,
         string vectorStoreSystemName,
         string? vectorStoreName,
@@ -41,7 +41,7 @@ internal static class QdrantCollectionSearchMapping
 
     internal static TRecord MapRetrievedPointToRecord<TRecord>(
         RetrievedPoint point,
-        QdrantMapper<TRecord> mapper,
+        ChromaMapper<TRecord> mapper,
         bool includeVectors,
         string vectorStoreSystemName,
         string? vectorStoreName,

@@ -7,12 +7,12 @@ using Microsoft.Extensions.VectorData.ProviderServices;
 using Qdrant.Client.Grpc;
 using Xunit;
 
-namespace CommunityToolkit.VectorData.Qdrant.UnitTests;
+namespace ChromaDB.VectorData.UnitTests;
 
 /// <summary>
-/// Contains tests for the <see cref="QdrantCollectionCreateMapping"/> class.
+/// Contains tests for the <see cref="ChromaCollectionCreateMapping"/> class.
 /// </summary>
-public class QdrantCollectionCreateMappingTests
+public class ChromaCollectionCreateMappingTests
 {
     [Fact]
     public void MapSingleVectorCreatesVectorParams()
@@ -21,7 +21,7 @@ public class QdrantCollectionCreateMappingTests
         var vectorProperty = new VectorPropertyModel("testvector", typeof(ReadOnlyMemory<float>)) { Dimensions = 4, DistanceFunction = DistanceFunction.DotProductSimilarity };
 
         // Act.
-        var actual = QdrantCollectionCreateMapping.MapSingleVector(vectorProperty);
+        var actual = ChromaCollectionCreateMapping.MapSingleVector(vectorProperty);
 
         // Assert.
         Assert.NotNull(actual);
@@ -36,7 +36,7 @@ public class QdrantCollectionCreateMappingTests
         var vectorProperty = new VectorPropertyModel("testvector", typeof(ReadOnlyMemory<float>)) { Dimensions = 4 };
 
         // Act.
-        var actual = QdrantCollectionCreateMapping.MapSingleVector(vectorProperty);
+        var actual = ChromaCollectionCreateMapping.MapSingleVector(vectorProperty);
 
         // Assert.
         Assert.Equal(Distance.Cosine, actual.Distance);
@@ -49,7 +49,7 @@ public class QdrantCollectionCreateMappingTests
         var vectorProperty = new VectorPropertyModel("testvector", typeof(ReadOnlyMemory<float>)) { Dimensions = 4, DistanceFunction = DistanceFunction.CosineDistance };
 
         // Act and assert.
-        Assert.Throws<NotSupportedException>(() => QdrantCollectionCreateMapping.MapSingleVector(vectorProperty));
+        Assert.Throws<NotSupportedException>(() => ChromaCollectionCreateMapping.MapSingleVector(vectorProperty));
     }
 
     [Fact]
@@ -72,7 +72,7 @@ public class QdrantCollectionCreateMappingTests
         };
 
         // Act.
-        var actual = QdrantCollectionCreateMapping.MapNamedVectors(vectorProperties);
+        var actual = ChromaCollectionCreateMapping.MapNamedVectors(vectorProperties);
 
         // Assert.
         Assert.NotNull(actual);

@@ -3,15 +3,15 @@
 
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using CommunityToolkit.VectorData.Qdrant;
+using ChromaDB.VectorData;
 using Qdrant.Client;
 using VectorData.ConformanceTests;
 using Xunit;
 
-namespace Qdrant.ConformanceTests;
+namespace ChromaDB.VectorData.ConformanceTests;
 
-public class QdrantDependencyInjectionTests
-    : DependencyInjectionTests<QdrantVectorStore, QdrantCollection<ulong, DependencyInjectionTests<ulong>.Record>, ulong, DependencyInjectionTests<ulong>.Record>
+public class ChromaDependencyInjectionTests
+    : DependencyInjectionTests<ChromaVectorStore, ChromaCollection<ulong, DependencyInjectionTests<ulong>.Record>, ulong, DependencyInjectionTests<ulong>.Record>
 {
     private const string Host = "localhost";
     private const int Port = 8080;
@@ -41,21 +41,21 @@ public class QdrantDependencyInjectionTests
             yield return (services, serviceKey, name, lifetime) => serviceKey is null
                 ? services
                     .AddSingleton<QdrantClient>(sp => new QdrantClient(Host, Port, apiKey: ApiKey))
-                    .AddQdrantCollection<ulong, Record>(name, lifetime: lifetime)
+                    .AddChromaCollection<ulong, Record>(name, lifetime: lifetime)
                 : services
                     .AddSingleton<QdrantClient>(sp => new QdrantClient(Host, Port, apiKey: ApiKey))
-                    .AddKeyedQdrantCollection<ulong, Record>(serviceKey, name, lifetime: lifetime);
+                    .AddKeyedChromaCollection<ulong, Record>(serviceKey, name, lifetime: lifetime);
 
             yield return (services, serviceKey, name, lifetime) => serviceKey is null
-                ? services.AddQdrantCollection<ulong, Record>(
+                ? services.AddChromaCollection<ulong, Record>(
                     name, Host, Port, apiKey: ApiKey, lifetime: lifetime)
-                : services.AddKeyedQdrantCollection<ulong, Record>(
+                : services.AddKeyedChromaCollection<ulong, Record>(
                     serviceKey, name, Host, Port, apiKey: ApiKey, lifetime: lifetime);
 
             yield return (services, serviceKey, name, lifetime) => serviceKey is null
-                ? services.AddQdrantCollection<ulong, Record>(
+                ? services.AddChromaCollection<ulong, Record>(
                     name, sp => new QdrantClient(HostProvider(sp), PortProvider(sp), apiKey: ApiKeyProvider(sp)), lifetime: lifetime)
-                : services.AddKeyedQdrantCollection<ulong, Record>(
+                : services.AddKeyedChromaCollection<ulong, Record>(
                     serviceKey, name, sp => new QdrantClient(HostProvider(sp, serviceKey), PortProvider(sp, serviceKey), apiKey: ApiKeyProvider(sp, serviceKey)), lifetime: lifetime);
         }
     }
@@ -65,18 +65,18 @@ public class QdrantDependencyInjectionTests
         get
         {
             yield return (services, serviceKey, lifetime) => serviceKey is null
-                ? services.AddQdrantVectorStore(
+                ? services.AddChromaVectorStore(
                     Host, Port, apiKey: ApiKey, lifetime: lifetime)
-                : services.AddKeyedQdrantVectorStore(
+                : services.AddKeyedChromaVectorStore(
                     serviceKey, Host, Port, apiKey: ApiKey, lifetime: lifetime);
 
             yield return (services, serviceKey, lifetime) => serviceKey is null
                 ? services
                     .AddSingleton<QdrantClient>(sp => new QdrantClient(Host, Port, apiKey: ApiKey))
-                    .AddQdrantVectorStore(lifetime: lifetime)
+                    .AddChromaVectorStore(lifetime: lifetime)
                 : services
                     .AddSingleton<QdrantClient>(sp => new QdrantClient(Host, Port, apiKey: ApiKey))
-                    .AddKeyedQdrantVectorStore(serviceKey, lifetime: lifetime);
+                    .AddKeyedChromaVectorStore(serviceKey, lifetime: lifetime);
         }
     }
 
@@ -85,15 +85,15 @@ public class QdrantDependencyInjectionTests
     {
         IServiceCollection services = new ServiceCollection();
 
-        Assert.Throws<ArgumentNullException>(() => services.AddQdrantVectorStore(host: null!));
-        Assert.Throws<ArgumentNullException>(() => services.AddKeyedQdrantVectorStore(serviceKey: "notNull", host: null!));
-        Assert.Throws<ArgumentNullException>(() => services.AddQdrantCollection<ulong, Record>(
+        Assert.Throws<ArgumentNullException>(() => services.AddChromaVectorStore(host: null!));
+        Assert.Throws<ArgumentNullException>(() => services.AddKeyedChromaVectorStore(serviceKey: "notNull", host: null!));
+        Assert.Throws<ArgumentNullException>(() => services.AddChromaCollection<ulong, Record>(
             name: "notNull", host: null!));
-        Assert.Throws<ArgumentException>(() => services.AddQdrantCollection<ulong, Record>(
+        Assert.Throws<ArgumentException>(() => services.AddChromaCollection<ulong, Record>(
             name: "notNull", host: ""));
-        Assert.Throws<ArgumentNullException>(() => services.AddKeyedQdrantCollection<ulong, Record>(
+        Assert.Throws<ArgumentNullException>(() => services.AddKeyedChromaCollection<ulong, Record>(
             serviceKey: "notNull", name: "notNull", host: null!));
-        Assert.Throws<ArgumentException>(() => services.AddKeyedQdrantCollection<ulong, Record>(
+        Assert.Throws<ArgumentException>(() => services.AddKeyedChromaCollection<ulong, Record>(
             serviceKey: "notNull", name: "notNull", host: ""));
     }
 }

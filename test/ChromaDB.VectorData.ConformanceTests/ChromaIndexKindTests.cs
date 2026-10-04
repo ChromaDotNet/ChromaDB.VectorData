@@ -2,15 +2,15 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using Microsoft.Extensions.VectorData;
-using Qdrant.ConformanceTests.Support;
+using ChromaDB.VectorData.ConformanceTests.Support;
 using VectorData.ConformanceTests;
 using VectorData.ConformanceTests.Support;
 using Xunit;
 
-namespace Qdrant.ConformanceTests;
+namespace ChromaDB.VectorData.ConformanceTests;
 
-public class QdrantIndexKindTests(QdrantIndexKindTests.Fixture fixture)
-    : IndexKindTests<ulong>(fixture), IClassFixture<QdrantIndexKindTests.Fixture>
+public class ChromaIndexKindTests(ChromaIndexKindTests.Fixture fixture)
+    : IndexKindTests<ulong>(fixture), IClassFixture<ChromaIndexKindTests.Fixture>
 {
     // Qdrant does not support index-less searching
     public override Task Flat() => Assert.ThrowsAsync<NotSupportedException>(base.Flat);
@@ -21,6 +21,6 @@ public class QdrantIndexKindTests(QdrantIndexKindTests.Fixture fixture)
 
     public new class Fixture() : IndexKindTests<ulong>.Fixture
     {
-        public override TestStore TestStore => QdrantTestStore.NamedVectorsInstance;
+        public override TestStore TestStore => ChromaTestStore.NamedVectorsInstance;
     }
 }

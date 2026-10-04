@@ -12,12 +12,12 @@ using Moq;
 using Qdrant.Client.Grpc;
 using Xunit;
 
-namespace CommunityToolkit.VectorData.Qdrant.UnitTests;
+namespace ChromaDB.VectorData.UnitTests;
 
 /// <summary>
-/// Contains tests for the <see cref="QdrantCollection{TKey, TRecord}"/> class.
+/// Contains tests for the <see cref="ChromaCollection{TKey, TRecord}"/> class.
 /// </summary>
-public class QdrantCollectionTests
+public class ChromaCollectionTests
 {
     private const string TestCollectionName = "testcollection";
     private const ulong UlongTestRecordKey1 = 1;
@@ -25,13 +25,13 @@ public class QdrantCollectionTests
     private static readonly Guid s_guidTestRecordKey1 = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid s_guidTestRecordKey2 = Guid.Parse("22222222-2222-2222-2222-222222222222");
 
-    private readonly Mock<MockableQdrantClient> _qdrantClientMock;
+    private readonly Mock<MockableChromaClient> _qdrantClientMock;
 
     private readonly CancellationToken _testCancellationToken = new(false);
 
-    public QdrantCollectionTests()
+    public ChromaCollectionTests()
     {
-        this._qdrantClientMock = new Mock<MockableQdrantClient>(MockBehavior.Strict);
+        this._qdrantClientMock = new Mock<MockableChromaClient>(MockBehavior.Strict);
     }
 
     [Theory]
@@ -40,7 +40,7 @@ public class QdrantCollectionTests
     public async Task CollectionExistsReturnsCollectionStateAsync(string collectionName, bool expectedExists)
     {
         // Arrange.
-        using var sut = new QdrantCollection<ulong, SinglePropsModel<ulong>>(() => this._qdrantClientMock.Object, collectionName);
+        using var sut = new ChromaCollection<ulong, SinglePropsModel<ulong>>(() => this._qdrantClientMock.Object, collectionName);
 
         this._qdrantClientMock
             .Setup(x => x.CollectionExistsAsync(
@@ -59,7 +59,7 @@ public class QdrantCollectionTests
     public async Task CanCreateCollectionAsync()
     {
         // Arrange.
-        using var sut = new QdrantCollection<ulong, SinglePropsModel<ulong>>(() => this._qdrantClientMock.Object, TestCollectionName);
+        using var sut = new ChromaCollection<ulong, SinglePropsModel<ulong>>(() => this._qdrantClientMock.Object, TestCollectionName);
 
         this._qdrantClientMock
             .Setup(x => x.CollectionExistsAsync(
@@ -126,7 +126,7 @@ public class QdrantCollectionTests
     public async Task CanDeleteCollectionAsync()
     {
         // Arrange.
-        using var sut = new QdrantCollection<ulong, SinglePropsModel<ulong>>(() => this._qdrantClientMock.Object, TestCollectionName);
+        using var sut = new ChromaCollection<ulong, SinglePropsModel<ulong>>(() => this._qdrantClientMock.Object, TestCollectionName);
 
         this._qdrantClientMock
             .Setup(x => x.DeleteCollectionAsync(
@@ -455,7 +455,7 @@ public class QdrantCollectionTests
         };
 
         // Act.
-        using var sut = new QdrantCollection<ulong, SinglePropsModel<ulong>>(
+        using var sut = new ChromaCollection<ulong, SinglePropsModel<ulong>>(
             () => this._qdrantClientMock.Object,
             TestCollectionName,
             new() { Definition = definition });
@@ -681,7 +681,7 @@ public class QdrantCollectionTests
     private VectorStoreCollection<T, SinglePropsModel<T>> CreateRecordCollection<T>(bool useDefinition, bool hasNamedVectors)
         where T : notnull
     {
-        var store = new QdrantCollection<T, SinglePropsModel<T>>(
+        var store = new ChromaCollection<T, SinglePropsModel<T>>(
             () => this._qdrantClientMock.Object,
             TestCollectionName,
             new()

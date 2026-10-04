@@ -5,12 +5,12 @@ using Microsoft.Extensions.VectorData;
 using Microsoft.Extensions.VectorData.ProviderServices;
 using Qdrant.Client.Grpc;
 
-namespace CommunityToolkit.VectorData.Qdrant;
+namespace ChromaDB.VectorData;
 
 /// <summary>
 /// Contains mapping helpers to use when creating a qdrant vector collection.
 /// </summary>
-internal static class QdrantCollectionCreateMapping
+internal static class ChromaCollectionCreateMapping
 {
     /// <summary>A dictionary of types and their matching qdrant index schema type.</summary>
     public static readonly Dictionary<Type, PayloadSchemaType> s_schemaTypeMap = new()
@@ -67,7 +67,7 @@ internal static class QdrantCollectionCreateMapping
             throw new NotSupportedException($"Index kind '{vectorProperty!.IndexKind}' for {nameof(VectorStoreVectorProperty)} '{vectorProperty.ModelName}' is not supported by the Qdrant VectorStore.");
         }
 
-        return new VectorParams { Size = (ulong)vectorProperty.Dimensions, Distance = QdrantCollectionCreateMapping.GetSDKDistanceAlgorithm(vectorProperty) };
+        return new VectorParams { Size = (ulong)vectorProperty.Dimensions, Distance = ChromaCollectionCreateMapping.GetSDKDistanceAlgorithm(vectorProperty) };
     }
 
     /// <summary>

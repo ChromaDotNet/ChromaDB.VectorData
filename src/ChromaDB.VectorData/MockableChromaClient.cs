@@ -5,12 +5,12 @@ using Qdrant.Client;
 using Qdrant.Client.Grpc;
 using Microsoft.Shared.Diagnostics;
 
-namespace CommunityToolkit.VectorData.Qdrant;
+namespace ChromaDB.VectorData;
 
 /// <summary>
 /// Decorator class for <see cref="QdrantClient"/> that exposes the required methods as virtual allowing for mocking in unit tests.
 /// </summary>
-internal class MockableQdrantClient : IDisposable
+internal class MockableChromaClient : IDisposable
 {
     /// <summary>Qdrant client that can be used to manage the collections and points in a Qdrant store.</summary>
     private readonly QdrantClient _qdrantClient;
@@ -18,11 +18,11 @@ internal class MockableQdrantClient : IDisposable
     private int _referenceCount = 1;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="MockableQdrantClient"/> class.
+    /// Initializes a new instance of the <see cref="MockableChromaClient"/> class.
     /// </summary>
     /// <param name="qdrantClient">Qdrant client that can be used to manage the collections and points in a Qdrant store.</param>
     /// <param name="ownsClient">A value indicating whether <paramref name="qdrantClient"/> is disposed when the vector store is disposed.</param>
-    public MockableQdrantClient(QdrantClient qdrantClient, bool ownsClient = true)
+    public MockableChromaClient(QdrantClient qdrantClient, bool ownsClient = true)
     {
         Throw.IfNull(qdrantClient);
 
@@ -35,7 +35,7 @@ internal class MockableQdrantClient : IDisposable
     /// <summary>
     /// Constructor for mocking purposes only.
     /// </summary>
-    internal MockableQdrantClient()
+    internal MockableChromaClient()
     {
     }
 
@@ -346,7 +346,7 @@ internal class MockableQdrantClient : IDisposable
             orderBy,
             cancellationToken);
 
-    internal MockableQdrantClient Share()
+    internal MockableChromaClient Share()
     {
         if (_ownsClient)
         {

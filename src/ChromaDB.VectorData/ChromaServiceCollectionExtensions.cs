@@ -4,155 +4,155 @@
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.VectorData;
-using CommunityToolkit.VectorData.Qdrant;
+using ChromaDB.VectorData;
 using Qdrant.Client;
 using Microsoft.Shared.Diagnostics;
 
 namespace Microsoft.Extensions.DependencyInjection;
 
 /// <summary>
-/// Extension methods to register <see cref="QdrantVectorStore"/> and <see cref="QdrantCollection{TKey, TRecord}"/>  instances on an <see cref="IServiceCollection"/>.
+/// Extension methods to register <see cref="ChromaVectorStore"/> and <see cref="ChromaCollection{TKey, TRecord}"/>  instances on an <see cref="IServiceCollection"/>.
 /// </summary>
-public static class QdrantServiceCollectionExtensions
+public static class ChromaServiceCollectionExtensions
 {
     private const string DynamicCodeMessage = "This method is incompatible with NativeAOT, consult the documentation for adding collections in a way that's compatible with NativeAOT.";
     private const string UnreferencedCodeMessage = "This method is incompatible with trimming, consult the documentation for adding collections in a way that's compatible with NativeAOT.";
 
     /// <summary>
-    /// Registers a <see cref="QdrantVectorStore"/> as <see cref="VectorStore"/>
+    /// Registers a <see cref="ChromaVectorStore"/> as <see cref="VectorStore"/>
     /// with <see cref="QdrantClient"/> returned by <paramref name="clientProvider"/>
     /// or retrieved from the dependency injection container if <paramref name="clientProvider"/> was not provided.
     /// </summary>
-    /// <inheritdoc cref="AddKeyedQdrantVectorStore(IServiceCollection, object?, Func{IServiceProvider, QdrantClient}, Func{IServiceProvider, QdrantVectorStoreOptions}?, ServiceLifetime)"/>
+    /// <inheritdoc cref="AddKeyedChromaVectorStore(IServiceCollection, object?, Func{IServiceProvider, QdrantClient}, Func{IServiceProvider, ChromaVectorStoreOptions}?, ServiceLifetime)"/>
     [RequiresUnreferencedCode(DynamicCodeMessage)]
     [RequiresDynamicCode(UnreferencedCodeMessage)]
-    public static IServiceCollection AddQdrantVectorStore(
+    public static IServiceCollection AddChromaVectorStore(
         this IServiceCollection services,
         Func<IServiceProvider, QdrantClient>? clientProvider = default,
-        Func<IServiceProvider, QdrantVectorStoreOptions>? optionsProvider = default,
+        Func<IServiceProvider, ChromaVectorStoreOptions>? optionsProvider = default,
         ServiceLifetime lifetime = ServiceLifetime.Singleton)
-        => AddKeyedQdrantVectorStore(services, serviceKey: null, clientProvider, optionsProvider, lifetime);
+        => AddKeyedChromaVectorStore(services, serviceKey: null, clientProvider, optionsProvider, lifetime);
 
     /// <summary>
-    /// Registers a keyed <see cref="QdrantVectorStore"/> as <see cref="VectorStore"/>
+    /// Registers a keyed <see cref="ChromaVectorStore"/> as <see cref="VectorStore"/>
     /// with <see cref="QdrantClient"/> returned by <paramref name="clientProvider"/> or retrieved from the dependency injection container if <paramref name="clientProvider"/> was not provided.
     /// </summary>
-    /// <param name="services">The <see cref="IServiceCollection"/> to register the <see cref="QdrantVectorStore"/> on.</param>
+    /// <param name="services">The <see cref="IServiceCollection"/> to register the <see cref="ChromaVectorStore"/> on.</param>
     /// <param name="serviceKey">The key with which to associate the vector store.</param>
     /// <param name="clientProvider">The <see cref="QdrantClient"/> provider.</param>
-    /// <param name="optionsProvider">Options provider to further configure the <see cref="QdrantVectorStore"/>.</param>
+    /// <param name="optionsProvider">Options provider to further configure the <see cref="ChromaVectorStore"/>.</param>
     /// <param name="lifetime">The service lifetime for the store. Defaults to <see cref="ServiceLifetime.Singleton"/>.</param>
     /// <returns>Service collection.</returns>
     [RequiresUnreferencedCode(DynamicCodeMessage)]
     [RequiresDynamicCode(UnreferencedCodeMessage)]
-    public static IServiceCollection AddKeyedQdrantVectorStore(
+    public static IServiceCollection AddKeyedChromaVectorStore(
         this IServiceCollection services,
         object? serviceKey,
         Func<IServiceProvider, QdrantClient>? clientProvider = default,
-        Func<IServiceProvider, QdrantVectorStoreOptions>? optionsProvider = default,
+        Func<IServiceProvider, ChromaVectorStoreOptions>? optionsProvider = default,
         ServiceLifetime lifetime = ServiceLifetime.Singleton)
     {
         Throw.IfNull(services);
 
-        services.Add(new ServiceDescriptor(typeof(QdrantVectorStore), serviceKey, (sp, _) =>
+        services.Add(new ServiceDescriptor(typeof(ChromaVectorStore), serviceKey, (sp, _) =>
         {
             var client = clientProvider is null ? sp.GetRequiredService<QdrantClient>() : clientProvider(sp);
             var options = GetStoreOptions(sp, optionsProvider);
 
             // The client was restored from the DI container, so we do not own it.
-            return new QdrantVectorStore(client, ownsClient: false, options);
+            return new ChromaVectorStore(client, ownsClient: false, options);
         }, lifetime));
 
         services.Add(new ServiceDescriptor(typeof(VectorStore), serviceKey,
-            static (sp, key) => sp.GetRequiredKeyedService<QdrantVectorStore>(key), lifetime));
+            static (sp, key) => sp.GetRequiredKeyedService<ChromaVectorStore>(key), lifetime));
 
         return services;
     }
 
     /// <summary>
-    /// Registers a <see cref="QdrantVectorStore"/> as <see cref="VectorStore"/>
+    /// Registers a <see cref="ChromaVectorStore"/> as <see cref="VectorStore"/>
     /// with <see cref="QdrantClient"/> created with <paramref name="host"/>, <paramref name="port"/>,
     /// <paramref name="https"/> and <paramref name="https"/>.
     /// </summary>
-    /// <inheritdoc cref="AddKeyedQdrantVectorStore(IServiceCollection, object?, Func{IServiceProvider, QdrantClient}, Func{IServiceProvider, QdrantVectorStoreOptions}?, ServiceLifetime)"/>
+    /// <inheritdoc cref="AddKeyedChromaVectorStore(IServiceCollection, object?, Func{IServiceProvider, QdrantClient}, Func{IServiceProvider, ChromaVectorStoreOptions}?, ServiceLifetime)"/>
     [RequiresUnreferencedCode(DynamicCodeMessage)]
     [RequiresDynamicCode(UnreferencedCodeMessage)]
-    public static IServiceCollection AddQdrantVectorStore(
+    public static IServiceCollection AddChromaVectorStore(
         this IServiceCollection services,
         string host,
         int port = 6334,
         bool https = true,
         string? apiKey = default,
-        QdrantVectorStoreOptions? options = default,
+        ChromaVectorStoreOptions? options = default,
         ServiceLifetime lifetime = ServiceLifetime.Singleton)
-        => AddKeyedQdrantVectorStore(services, serviceKey: null, host, port, https, apiKey, options, lifetime);
+        => AddKeyedChromaVectorStore(services, serviceKey: null, host, port, https, apiKey, options, lifetime);
 
     /// <summary>
-    /// Registers a keyed <see cref="QdrantVectorStore"/> as <see cref="VectorStore"/>
+    /// Registers a keyed <see cref="ChromaVectorStore"/> as <see cref="VectorStore"/>
     /// with <see cref="QdrantClient"/> created with <paramref name="host"/>, <paramref name="port"/>,
     /// <paramref name="https"/> and <paramref name="https"/>.
     /// </summary>
-    /// <param name="services">The <see cref="IServiceCollection"/> to register the <see cref="QdrantVectorStore"/> on.</param>
+    /// <param name="services">The <see cref="IServiceCollection"/> to register the <see cref="ChromaVectorStore"/> on.</param>
     /// <param name="serviceKey">The key with which to associate the vector store.</param>
     /// <param name="host">The host to connect to.</param>
     /// <param name="port">The port to connect to. Defaults to 6334.</param>
     /// <param name="https">Whether to encrypt the connection using HTTPS. Defaults to <c>true</c>.</param>
     /// <param name="apiKey">The API key to use.</param>
-    /// <param name="options">Options to further configure the <see cref="QdrantVectorStore"/>.</param>
+    /// <param name="options">Options to further configure the <see cref="ChromaVectorStore"/>.</param>
     /// <param name="lifetime">The service lifetime for the store. Defaults to <see cref="ServiceLifetime.Singleton"/>.</param>
     /// <returns>Service collection.</returns>
     [RequiresUnreferencedCode(DynamicCodeMessage)]
     [RequiresDynamicCode(UnreferencedCodeMessage)]
-    public static IServiceCollection AddKeyedQdrantVectorStore(
+    public static IServiceCollection AddKeyedChromaVectorStore(
         this IServiceCollection services,
         object? serviceKey,
         string host,
         int port = 6334,
         bool https = true,
         string? apiKey = default,
-        QdrantVectorStoreOptions? options = default,
+        ChromaVectorStoreOptions? options = default,
         ServiceLifetime lifetime = ServiceLifetime.Singleton)
     {
         Throw.IfNullOrWhitespace(host);
 
-        return AddKeyedQdrantVectorStore(services, serviceKey, _ => new QdrantClient(host, port, https, apiKey), sp => options!, lifetime);
+        return AddKeyedChromaVectorStore(services, serviceKey, _ => new QdrantClient(host, port, https, apiKey), sp => options!, lifetime);
     }
 
     /// <summary>
-    /// Registers a <see cref="QdrantCollection{TKey, TRecord}"/> as <see cref="VectorStoreCollection{TKey, TRecord}"/>
+    /// Registers a <see cref="ChromaCollection{TKey, TRecord}"/> as <see cref="VectorStoreCollection{TKey, TRecord}"/>
     /// with <see cref="QdrantClient"/> returned by <paramref name="clientProvider"/> or retrieved from the dependency injection container if <paramref name="clientProvider"/> was not provided.
     /// </summary>
     [RequiresUnreferencedCode(DynamicCodeMessage)]
     [RequiresDynamicCode(UnreferencedCodeMessage)]
-    public static IServiceCollection AddQdrantCollection<TKey, TRecord>(
+    public static IServiceCollection AddChromaCollection<TKey, TRecord>(
         this IServiceCollection services,
         string name,
         Func<IServiceProvider, QdrantClient>? clientProvider = default,
-        Func<IServiceProvider, QdrantCollectionOptions>? optionsProvider = default,
+        Func<IServiceProvider, ChromaCollectionOptions>? optionsProvider = default,
         ServiceLifetime lifetime = ServiceLifetime.Singleton)
         where TKey : notnull
         where TRecord : class
-        => AddKeyedQdrantCollection<TKey, TRecord>(services, serviceKey: null, name, clientProvider, optionsProvider, lifetime);
+        => AddKeyedChromaCollection<TKey, TRecord>(services, serviceKey: null, name, clientProvider, optionsProvider, lifetime);
 
     /// <summary>
-    /// Registers a keyed <see cref="QdrantCollection{TKey, TRecord}"/> as <see cref="VectorStoreCollection{TKey, TRecord}"/>
+    /// Registers a keyed <see cref="ChromaCollection{TKey, TRecord}"/> as <see cref="VectorStoreCollection{TKey, TRecord}"/>
     /// with <see cref="QdrantClient"/> returned by <paramref name="clientProvider"/> or retrieved from the dependency injection container if <paramref name="clientProvider"/> was not provided.
     /// </summary>
-    /// <param name="services">The <see cref="IServiceCollection"/> to register the <see cref="QdrantCollection{TKey, TRecord}"/> on.</param>
+    /// <param name="services">The <see cref="IServiceCollection"/> to register the <see cref="ChromaCollection{TKey, TRecord}"/> on.</param>
     /// <param name="serviceKey">The key with which to associate the collection.</param>
     /// <param name="name">The name of the collection.</param>
     /// <param name="clientProvider">The <see cref="QdrantClient"/> provider.</param>
-    /// <param name="optionsProvider">Options provider to further configure the <see cref="QdrantCollection{TKey, TRecord}"/>.</param>
+    /// <param name="optionsProvider">Options provider to further configure the <see cref="ChromaCollection{TKey, TRecord}"/>.</param>
     /// <param name="lifetime">The service lifetime for the store. Defaults to <see cref="ServiceLifetime.Singleton"/>.</param>
     /// <returns>Service collection.</returns>
     [RequiresUnreferencedCode(DynamicCodeMessage)]
     [RequiresDynamicCode(UnreferencedCodeMessage)]
-    public static IServiceCollection AddKeyedQdrantCollection<TKey, TRecord>(
+    public static IServiceCollection AddKeyedChromaCollection<TKey, TRecord>(
         this IServiceCollection services,
         object? serviceKey,
         string name,
         Func<IServiceProvider, QdrantClient>? clientProvider = default,
-        Func<IServiceProvider, QdrantCollectionOptions>? optionsProvider = default,
+        Func<IServiceProvider, ChromaCollectionOptions>? optionsProvider = default,
         ServiceLifetime lifetime = ServiceLifetime.Singleton)
         where TKey : notnull
         where TRecord : class
@@ -160,66 +160,66 @@ public static class QdrantServiceCollectionExtensions
         Throw.IfNull(services);
         Throw.IfNullOrWhitespace(name);
 
-        services.Add(new ServiceDescriptor(typeof(QdrantCollection<TKey, TRecord>), serviceKey, (sp, _) =>
+        services.Add(new ServiceDescriptor(typeof(ChromaCollection<TKey, TRecord>), serviceKey, (sp, _) =>
         {
             var client = clientProvider is null ? sp.GetRequiredService<QdrantClient>() : clientProvider(sp);
             var options = GetCollectionOptions(sp, optionsProvider);
 
             // The client was restored from the DI container, so we do not own it.
-            return new QdrantCollection<TKey, TRecord>(client, name, ownsClient: false, options);
+            return new ChromaCollection<TKey, TRecord>(client, name, ownsClient: false, options);
         }, lifetime));
 
         services.Add(new ServiceDescriptor(typeof(VectorStoreCollection<TKey, TRecord>), serviceKey,
-            static (sp, key) => sp.GetRequiredKeyedService<QdrantCollection<TKey, TRecord>>(key), lifetime));
+            static (sp, key) => sp.GetRequiredKeyedService<ChromaCollection<TKey, TRecord>>(key), lifetime));
 
         services.Add(new ServiceDescriptor(typeof(IVectorSearchable<TRecord>), serviceKey,
-            static (sp, key) => sp.GetRequiredKeyedService<QdrantCollection<TKey, TRecord>>(key), lifetime));
+            static (sp, key) => sp.GetRequiredKeyedService<ChromaCollection<TKey, TRecord>>(key), lifetime));
 
         services.Add(new ServiceDescriptor(typeof(IKeywordHybridSearchable<TRecord>), serviceKey,
-            static (sp, key) => sp.GetRequiredKeyedService<QdrantCollection<TKey, TRecord>>(key), lifetime));
+            static (sp, key) => sp.GetRequiredKeyedService<ChromaCollection<TKey, TRecord>>(key), lifetime));
 
         return services;
     }
 
     /// <summary>
-    /// Registers a <see cref="QdrantCollection{TKey, TRecord}"/> as <see cref="VectorStoreCollection{TKey, TRecord}"/>
+    /// Registers a <see cref="ChromaCollection{TKey, TRecord}"/> as <see cref="VectorStoreCollection{TKey, TRecord}"/>
     /// with <see cref="QdrantClient"/> created with <paramref name="host"/>, <paramref name="port"/>,
     /// <paramref name="https"/> and <paramref name="https"/>.
     /// </summary>
-    /// <inheritdoc cref="AddKeyedQdrantCollection{TKey, TRecord}(IServiceCollection, object?, string, string, int, bool, string?, QdrantCollectionOptions?, ServiceLifetime)"/>
+    /// <inheritdoc cref="AddKeyedChromaCollection{TKey, TRecord}(IServiceCollection, object?, string, string, int, bool, string?, ChromaCollectionOptions?, ServiceLifetime)"/>
     [RequiresUnreferencedCode(DynamicCodeMessage)]
     [RequiresDynamicCode(UnreferencedCodeMessage)]
-    public static IServiceCollection AddQdrantCollection<TKey, TRecord>(
+    public static IServiceCollection AddChromaCollection<TKey, TRecord>(
         this IServiceCollection services,
         string name,
         string host,
         int port = 6334,
         bool https = true,
         string? apiKey = default,
-        QdrantCollectionOptions? options = default,
+        ChromaCollectionOptions? options = default,
         ServiceLifetime lifetime = ServiceLifetime.Singleton)
         where TKey : notnull
         where TRecord : class
-        => AddKeyedQdrantCollection<TKey, TRecord>(services, serviceKey: null, name, host, port, https, apiKey, options, lifetime);
+        => AddKeyedChromaCollection<TKey, TRecord>(services, serviceKey: null, name, host, port, https, apiKey, options, lifetime);
 
     /// <summary>
-    /// Registers a keyed <see cref="QdrantCollection{TKey, TRecord}"/> as <see cref="VectorStoreCollection{TKey, TRecord}"/>
+    /// Registers a keyed <see cref="ChromaCollection{TKey, TRecord}"/> as <see cref="VectorStoreCollection{TKey, TRecord}"/>
     /// with <see cref="QdrantClient"/> created with <paramref name="host"/>, <paramref name="port"/>,
     /// <paramref name="https"/> and <paramref name="https"/>.
     /// </summary>
-    /// <param name="services">The <see cref="IServiceCollection"/> to register the <see cref="QdrantCollection{TKey, TRecord}"/> on.</param>
+    /// <param name="services">The <see cref="IServiceCollection"/> to register the <see cref="ChromaCollection{TKey, TRecord}"/> on.</param>
     /// <param name="serviceKey">The key with which to associate the collection.</param>
     /// <param name="name">The name of the collection.</param>
     /// <param name="host">The host to connect to.</param>
     /// <param name="port">The port to connect to. Defaults to 6334.</param>
     /// <param name="https">Whether to encrypt the connection using HTTPS. Defaults to <c>true</c>.</param>
     /// <param name="apiKey">The API key to use.</param>
-    /// <param name="options">Options to further configure the <see cref="QdrantCollection{TKey, TRecord}"/>.</param>
+    /// <param name="options">Options to further configure the <see cref="ChromaCollection{TKey, TRecord}"/>.</param>
     /// <param name="lifetime">The service lifetime for the store. Defaults to <see cref="ServiceLifetime.Singleton"/>.</param>
     /// <returns>Service collection.</returns>
     [RequiresUnreferencedCode(DynamicCodeMessage)]
     [RequiresDynamicCode(UnreferencedCodeMessage)]
-    public static IServiceCollection AddKeyedQdrantCollection<TKey, TRecord>(
+    public static IServiceCollection AddKeyedChromaCollection<TKey, TRecord>(
         this IServiceCollection services,
         object? serviceKey,
         string name,
@@ -227,17 +227,17 @@ public static class QdrantServiceCollectionExtensions
         int port = 6334,
         bool https = true,
         string? apiKey = default,
-        QdrantCollectionOptions? options = default,
+        ChromaCollectionOptions? options = default,
         ServiceLifetime lifetime = ServiceLifetime.Singleton)
         where TKey : notnull
         where TRecord : class
     {
         Throw.IfNullOrWhitespace(host);
 
-        return AddKeyedQdrantCollection<TKey, TRecord>(services, serviceKey, name, _ => new QdrantClient(host, port, https, apiKey), sp => options!, lifetime);
+        return AddKeyedChromaCollection<TKey, TRecord>(services, serviceKey, name, _ => new QdrantClient(host, port, https, apiKey), sp => options!, lifetime);
     }
 
-    private static QdrantVectorStoreOptions? GetStoreOptions(IServiceProvider sp, Func<IServiceProvider, QdrantVectorStoreOptions?>? optionsProvider)
+    private static ChromaVectorStoreOptions? GetStoreOptions(IServiceProvider sp, Func<IServiceProvider, ChromaVectorStoreOptions?>? optionsProvider)
     {
         var options = optionsProvider?.Invoke(sp);
         if (options?.EmbeddingGenerator is not null)
@@ -251,7 +251,7 @@ public static class QdrantServiceCollectionExtensions
             : new(options) { EmbeddingGenerator = embeddingGenerator }; // Create a brand new copy in order to avoid modifying the original options.
     }
 
-    private static QdrantCollectionOptions? GetCollectionOptions(IServiceProvider sp, Func<IServiceProvider, QdrantCollectionOptions?>? optionsProvider)
+    private static ChromaCollectionOptions? GetCollectionOptions(IServiceProvider sp, Func<IServiceProvider, ChromaCollectionOptions?>? optionsProvider)
     {
         var options = optionsProvider?.Invoke(sp);
         if (options?.EmbeddingGenerator is not null)

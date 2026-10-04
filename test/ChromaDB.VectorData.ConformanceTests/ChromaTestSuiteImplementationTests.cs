@@ -3,6 +3,6 @@
 
 using VectorData.ConformanceTests;
 
-namespace Qdrant.ConformanceTests;
+namespace ChromaDB.VectorData.ConformanceTests;
 
-public class QdrantTestSuiteImplementationTests : TestSuiteImplementationTests;
+public class ChromaTestSuiteImplementationTests : TestSuiteImplementationTests;

@@ -1,18 +1,18 @@
 ﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using Qdrant.ConformanceTests.Support;
+using ChromaDB.VectorData.ConformanceTests.Support;
 using VectorData.ConformanceTests.ModelTests;
 using VectorData.ConformanceTests.Support;
 using Xunit;
 
-namespace Qdrant.ConformanceTests.ModelTests;
+namespace ChromaDB.VectorData.ConformanceTests.ModelTests;
 
-public class QdrantMultiVectorModelTests(QdrantMultiVectorModelTests.Fixture fixture)
-    : MultiVectorModelTests<ulong>(fixture), IClassFixture<QdrantMultiVectorModelTests.Fixture>
+public class ChromaMultiVectorModelTests(ChromaMultiVectorModelTests.Fixture fixture)
+    : MultiVectorModelTests<ulong>(fixture), IClassFixture<ChromaMultiVectorModelTests.Fixture>
 {
     public new class Fixture : MultiVectorModelTests<ulong>.Fixture
     {
-        public override TestStore TestStore => QdrantTestStore.NamedVectorsInstance;
+        public override TestStore TestStore => ChromaTestStore.NamedVectorsInstance;
     }
 }

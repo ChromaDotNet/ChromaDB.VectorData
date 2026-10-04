@@ -1,8 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <AssemblyName>CommunityToolkit.VectorData.Qdrant.UnitTests</AssemblyName>
-    <RootNamespace>CommunityToolkit.VectorData.Qdrant.UnitTests</RootNamespace>
+    <AssemblyName>ChromaDB.VectorData.UnitTests</AssemblyName>
+    <RootNamespace>ChromaDB.VectorData.UnitTests</RootNamespace>
     <TargetFramework>net10.0</TargetFramework>
     <IsTestProject>true</IsTestProject>
     <Nullable>enable</Nullable>
