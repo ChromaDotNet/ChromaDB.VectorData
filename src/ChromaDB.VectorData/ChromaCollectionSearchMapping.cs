@@ -1,55 +1,46 @@
-﻿// Licensed to the .NET Foundation under one or more agreements.
+// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using Microsoft.Extensions.VectorData;
-using Qdrant.Client.Grpc;
 
 namespace ChromaDB.VectorData;
 
 /// <summary>
-/// Contains mapping helpers to use when searching for documents using Qdrant.
+/// Contains mapping helpers to use when searching for records using Chroma.
 /// </summary>
 internal static class ChromaCollectionSearchMapping
 {
     /// <summary>
-    /// Map the given <see cref="ScoredPoint"/> to a <see cref="VectorSearchResult{TRecord}"/>.
+    /// Convert the distance Chroma returns to the score of the given distance function.
     /// </summary>
-    /// <typeparam name="TRecord">The type of the record to map to.</typeparam>
-    /// <param name="point">The point to map to a <see cref="VectorSearchResult{TRecord}"/>.</param>
-    /// <param name="mapper">The mapper to perform the main mapping operation with.</param>
-    /// <param name="includeVectors">A value indicating whether to include vectors in the mapped result.</param>
-    /// <param name="vectorStoreSystemName">The name of the vector store system the operation is being run on.</param>
-    /// <param name="vectorStoreName">The name of the vector store the operation is being run on.</param>
-    /// <param name="collectionName">The name of the collection the operation is being run on.</param>
-    /// <param name="operationName">The type of database operation being run.</param>
-    /// <returns>The mapped <see cref="VectorSearchResult{TRecord}"/>.</returns>
-    public static VectorSearchResult<TRecord> MapScoredPointToVectorSearchResult<TRecord>(
-        ScoredPoint point,
-        ChromaMapper<TRecord> mapper,
-        bool includeVectors,
-        string vectorStoreSystemName,
-        string? vectorStoreName,
-        string collectionName,
-        string operationName)
-        where TRecord : class
-    {
-        // Do the mapping with error handling.
-        return new VectorSearchResult<TRecord>(
-            mapper.MapFromStorageToDataModel(point.Id, point.Payload, point.Vectors, includeVectors),
-            point.Score);
-    }
+    /// <remarks>
+    /// Chroma returns 1 - cosine similarity for cosine, 1 - dot product for ip, and the squared Euclidean distance for l2.
+    /// </remarks>
+    /// <param name="distance">The distance returned by Chroma.</param>
+    /// <param name="distanceFunction">The distance function of the vector property.</param>
+    /// <returns>The score.</returns>
+    public static double ToScore(float distance, string? distanceFunction)
+        => distanceFunction switch
+        {
+            DistanceFunction.CosineSimilarity or null => 1 - distance,
+            DistanceFunction.CosineDistance => distance,
+            DistanceFunction.DotProductSimilarity => 1 - distance,
+            DistanceFunction.NegativeDotProductSimilarity => distance - 1,
+            DistanceFunction.EuclideanSquaredDistance => distance,
+            DistanceFunction.EuclideanDistance => Math.Sqrt(distance),
 
-    internal static TRecord MapRetrievedPointToRecord<TRecord>(
-        RetrievedPoint point,
-        ChromaMapper<TRecord> mapper,
-        bool includeVectors,
-        string vectorStoreSystemName,
-        string? vectorStoreName,
-        string collectionName,
-        string operationName)
-        where TRecord : class
-    {
-        // Do the mapping with error handling.
-        return mapper.MapFromStorageToDataModel(point.Id, point.Payload, point.Vectors, includeVectors);
-    }
+            _ => throw new NotSupportedException($"Distance function '{distanceFunction}' is not supported by the Chroma VectorStore.")
+        };
+
+    /// <summary>
+    /// Whether the score passes the threshold: a similarity must reach it, a distance must not go beyond it.
+    /// </summary>
+    /// <param name="score">The score.</param>
+    /// <param name="threshold">The threshold, or <see langword="null"/> for none.</param>
+    /// <param name="distanceFunction">The distance function of the vector property.</param>
+    public static bool PassesThreshold(double score, double? threshold, string? distanceFunction)
+        => threshold is not { } t
+            || (distanceFunction is DistanceFunction.CosineSimilarity or DistanceFunction.DotProductSimilarity or null
+                ? score >= t
+                : score <= t);
 }

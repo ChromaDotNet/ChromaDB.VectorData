@@ -1,109 +1,49 @@
-﻿// Licensed to the .NET Foundation under one or more agreements.
+// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using Microsoft.Extensions.VectorData;
 using Microsoft.Extensions.VectorData.ProviderServices;
-using Qdrant.Client.Grpc;
 
 namespace ChromaDB.VectorData;
 
 /// <summary>
-/// Contains mapping helpers to use when creating a qdrant vector collection.
+/// Contains mapping helpers to use when creating a Chroma collection.
 /// </summary>
 internal static class ChromaCollectionCreateMapping
 {
-    /// <summary>A dictionary of types and their matching qdrant index schema type.</summary>
-    public static readonly Dictionary<Type, PayloadSchemaType> s_schemaTypeMap = new()
-    {
-        { typeof(short), PayloadSchemaType.Integer },
-        { typeof(sbyte), PayloadSchemaType.Integer },
-        { typeof(byte), PayloadSchemaType.Integer },
-        { typeof(ushort), PayloadSchemaType.Integer },
-        { typeof(int), PayloadSchemaType.Integer },
-        { typeof(uint), PayloadSchemaType.Integer },
-        { typeof(long), PayloadSchemaType.Integer },
-        { typeof(ulong), PayloadSchemaType.Integer },
-        { typeof(float), PayloadSchemaType.Float },
-        { typeof(double), PayloadSchemaType.Float },
-        { typeof(decimal), PayloadSchemaType.Float },
-
-        { typeof(short?), PayloadSchemaType.Integer },
-        { typeof(sbyte?), PayloadSchemaType.Integer },
-        { typeof(byte?), PayloadSchemaType.Integer },
-        { typeof(ushort?), PayloadSchemaType.Integer },
-        { typeof(int?), PayloadSchemaType.Integer },
-        { typeof(uint?), PayloadSchemaType.Integer },
-        { typeof(long?), PayloadSchemaType.Integer },
-        { typeof(ulong?), PayloadSchemaType.Integer },
-        { typeof(float?), PayloadSchemaType.Float },
-        { typeof(double?), PayloadSchemaType.Float },
-        { typeof(decimal?), PayloadSchemaType.Float },
-
-        { typeof(string), PayloadSchemaType.Keyword },
-        { typeof(bool), PayloadSchemaType.Bool },
-        { typeof(bool?), PayloadSchemaType.Bool },
-
-        { typeof(DateTime), PayloadSchemaType.Datetime },
-        { typeof(DateTimeOffset), PayloadSchemaType.Datetime },
-        { typeof(DateTime?), PayloadSchemaType.Datetime },
-        { typeof(DateTimeOffset?), PayloadSchemaType.Datetime },
-
-#if NET
-        { typeof(DateOnly), PayloadSchemaType.Datetime },
-        { typeof(DateOnly?), PayloadSchemaType.Datetime },
-#endif
-    };
+    /// <summary>The collection metadata key that sets the distance function of a Chroma collection.</summary>
+    internal const string SpaceMetadataKey = "hnsw:space";
 
     /// <summary>
-    /// Maps a single <see cref="VectorStoreVectorProperty"/> to a qdrant <see cref="VectorParams"/>.
+    /// Maps the vector property to the metadata of the Chroma collection.
     /// </summary>
-    /// <param name="vectorProperty">The property to map.</param>
-    /// <returns>The mapped <see cref="VectorParams"/>.</returns>
-    /// <exception cref="InvalidOperationException">Thrown if the property is missing information or has unsupported options specified.</exception>
-    public static VectorParams MapSingleVector(VectorPropertyModel vectorProperty)
+    /// <param name="vectorProperty">The vector property.</param>
+    /// <returns>The metadata to create the collection with.</returns>
+    /// <exception cref="NotSupportedException">Thrown if the property has options that Chroma does not support.</exception>
+    public static Dictionary<string, object> MapCollectionMetadata(VectorPropertyModel vectorProperty)
     {
-        if (vectorProperty!.IndexKind is not null and not IndexKind.Hnsw)
+        if (vectorProperty.IndexKind is not null and not IndexKind.Hnsw)
         {
-            throw new NotSupportedException($"Index kind '{vectorProperty!.IndexKind}' for {nameof(VectorStoreVectorProperty)} '{vectorProperty.ModelName}' is not supported by the Qdrant VectorStore.");
+            throw new NotSupportedException($"Index kind '{vectorProperty.IndexKind}' for {nameof(VectorStoreVectorProperty)} '{vectorProperty.ModelName}' is not supported by the Chroma VectorStore.");
         }
 
-        return new VectorParams { Size = (ulong)vectorProperty.Dimensions, Distance = ChromaCollectionCreateMapping.GetSDKDistanceAlgorithm(vectorProperty) };
+        return new() { [SpaceMetadataKey] = GetSpace(vectorProperty) };
     }
 
     /// <summary>
-    /// Maps a collection of <see cref="VectorStoreVectorProperty"/> to a qdrant <see cref="VectorParamsMap"/>.
-    /// </summary>
-    /// <param name="vectorProperties">The properties to map.</param>
-    /// <returns>THe mapped <see cref="VectorParamsMap"/>.</returns>
-    /// <exception cref="InvalidOperationException">Thrown if the property is missing information or has unsupported options specified.</exception>
-    public static VectorParamsMap MapNamedVectors(IEnumerable<VectorPropertyModel> vectorProperties)
-    {
-        var vectorParamsMap = new VectorParamsMap();
-
-        foreach (var vectorProperty in vectorProperties)
-        {
-            // Add each vector property to the vectors map.
-            vectorParamsMap.Map.Add(vectorProperty.StorageName, MapSingleVector(vectorProperty));
-        }
-
-        return vectorParamsMap;
-    }
-
-    /// <summary>
-    /// Get the configured <see cref="Distance"/> from the given <paramref name="vectorProperty"/>.
-    /// If none is configured, the default is <see cref="Distance.Cosine"/>.
+    /// Get the Chroma distance function, called space, for the given <paramref name="vectorProperty"/>.
+    /// If none is configured, the default is cosine.
     /// </summary>
     /// <param name="vectorProperty">The vector property definition.</param>
-    /// <returns>The chosen <see cref="Distance"/>.</returns>
-    /// <exception cref="InvalidOperationException">Thrown if a distance function is chosen that isn't supported by qdrant.</exception>
-    public static Distance GetSDKDistanceAlgorithm(VectorPropertyModel vectorProperty)
+    /// <returns>The Chroma space.</returns>
+    /// <exception cref="NotSupportedException">Thrown if a distance function is chosen that Chroma does not support.</exception>
+    public static string GetSpace(VectorPropertyModel vectorProperty)
         => vectorProperty.DistanceFunction switch
         {
-            DistanceFunction.CosineSimilarity or null => Distance.Cosine,
-            DistanceFunction.DotProductSimilarity => Distance.Dot,
-            DistanceFunction.EuclideanDistance => Distance.Euclid,
-            DistanceFunction.ManhattanDistance => Distance.Manhattan,
+            DistanceFunction.CosineSimilarity or DistanceFunction.CosineDistance or null => "cosine",
+            DistanceFunction.DotProductSimilarity or DistanceFunction.NegativeDotProductSimilarity => "ip",
+            DistanceFunction.EuclideanSquaredDistance or DistanceFunction.EuclideanDistance => "l2",
 
-            _ => throw new NotSupportedException($"Distance function '{vectorProperty.DistanceFunction}' for {nameof(VectorStoreVectorProperty)} '{vectorProperty.ModelName}' is not supported by the Qdrant VectorStore.")
+            _ => throw new NotSupportedException($"Distance function '{vectorProperty.DistanceFunction}' for {nameof(VectorStoreVectorProperty)} '{vectorProperty.ModelName}' is not supported by the Chroma VectorStore.")
         };
 }
