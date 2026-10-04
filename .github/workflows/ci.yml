@@ -60,9 +60,18 @@ jobs:
   # Conformance tests run on Ubuntu only: they start Chroma with Testcontainers and a Linux Docker image,
   # which isn't available on Windows GitHub-hosted runners.
   conformance-tests:
-    name: Conformance Tests
+    name: 'Conformance Tests (Chroma ${{ matrix.chroma }})'
     needs: build
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 1.5.0, the first release that stores lists in metadata; 1.5.9, the current release;
+        # latest catches new releases without blocking.
+        chroma: ['1.5.0', '1.5.9', 'latest']
+    continue-on-error: ${{ matrix.chroma == 'latest' }}
+    env:
+      CHROMA_IMAGE: chromadb/chroma:${{ matrix.chroma }}
     steps:
       - uses: actions/checkout@v6
 
