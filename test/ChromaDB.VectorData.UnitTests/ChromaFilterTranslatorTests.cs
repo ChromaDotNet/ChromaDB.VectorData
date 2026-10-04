@@ -43,7 +43,11 @@ public class ChromaFilterTranslatorTests
 
     [Fact]
     public void TranslatesTrueToNoFilter()
-        => Assert.Null(new ChromaFilterTranslator().Translate((Expression<Func<Hotel<string>, bool>>)(h => true), s_model));
+        => AssertMatchesAll(TranslateFilter(h => true));
+
+    [Fact]
+    public void TranslatesFalseToNoRecord()
+        => Assert.True(TranslateFilter(h => false).MatchesNothing);
 
     [Fact]
     public void ThrowsForNull()
@@ -74,35 +78,120 @@ public class ChromaFilterTranslatorTests
             Translate(h => !h.Tags!.Any(t => new[] { "pool", "spa" }.Contains(t))));
 
     [Fact]
-    public void ThrowsForAnyOverAnEmptyArray()
-        => Assert.Throws<NotSupportedException>(() => Translate(h => h.Tags!.Any(t => new string[0].Contains(t))));
+    public void TranslatesAnyOverAnEmptyArrayToNoRecord()
+        => Assert.True(TranslateFilter(h => h.Tags!.Any(t => new string[0].Contains(t))).MatchesNothing);
 
     [Fact]
     public void TranslatesANegatedAnyOverAnEmptyArrayToMatchAll()
-        => Assert.Null(new ChromaFilterTranslator().Translate((Expression<Func<Hotel<string>, bool>>)(h => !h.Tags!.Any(t => new string[0].Contains(t))), s_model));
+        => AssertMatchesAll(TranslateFilter(h => !h.Tags!.Any(t => new string[0].Contains(t))));
 
     [Fact]
-    public void ThrowsForContainsOverAnEmptyInlineArray()
-        => Assert.Throws<NotSupportedException>(() => Translate(h => new string[0].Contains(h.HotelName)));
+    public void TranslatesContainsOverAnEmptyInlineArrayToNoRecord()
+        => Assert.True(TranslateFilter(h => new string[0].Contains(h.HotelName)).MatchesNothing);
 
     [Fact]
-    public void ThrowsForContainsOverAnEmptyCapturedList()
+    public void TranslatesContainsOverAnEmptyCapturedListToNoRecord()
     {
         var names = new System.Collections.Generic.List<string>();
 
-        Assert.Throws<NotSupportedException>(() => Translate(h => names.Contains(h.HotelName!)));
+        Assert.True(TranslateFilter(h => names.Contains(h.HotelName!)).MatchesNothing);
     }
 
     [Fact]
     public void TranslatesANegatedContainsOverAnEmptyInlineArrayToMatchAll()
-        => Assert.Null(new ChromaFilterTranslator().Translate((Expression<Func<Hotel<string>, bool>>)(h => !new string[0].Contains(h.HotelName)), s_model));
+        => AssertMatchesAll(TranslateFilter(h => !new string[0].Contains(h.HotelName)));
+
+    [Fact]
+    public void DropsAnOrBranchThatMatchesNoRecord()
+        => Assert.Equal("""{"Rating":{"$gte":4}}""", Translate(h => new string[0].Contains(h.HotelName) || h.Rating >= 4));
+
+    [Fact]
+    public void TranslatesAnAndWithABranchThatMatchesNoRecordToNoRecord()
+        => Assert.True(TranslateFilter(h => new string[0].Contains(h.HotelName) && h.Rating >= 4).MatchesNothing);
+
+    [Fact]
+    public void TranslatesKeyEqualityToIds()
+    {
+        var filter = TranslateFilter(h => h.HotelId == "h1");
+
+        Assert.Equal(["h1"], filter.Ids);
+        Assert.Null(filter.Where);
+        Assert.False(filter.MatchesNothing);
+    }
+
+    [Fact]
+    public void TranslatesKeyEqualityWithTheConstantOnTheLeftToIds()
+        => Assert.Equal(["h1"], TranslateFilter(h => "h1" == h.HotelId).Ids);
+
+    [Fact]
+    public void TranslatesContainsOverAListOfKeysToIds()
+    {
+        var keys = new System.Collections.Generic.List<string> { "h1", "h2", "h1" };
+
+        Assert.Equal(["h1", "h2"], TranslateFilter(h => keys.Contains(h.HotelId)).Ids);
+    }
+
+    [Fact]
+    public void TranslatesAKeyConditionJoinedWithAndToIdsAndAWhereClause()
+    {
+        var filter = TranslateFilter(h => h.Rating >= 4 && new[] { "h1", "h2" }.Contains(h.HotelId));
+
+        Assert.Equal(["h1", "h2"], filter.Ids);
+        Assert.Equal("""{"Rating":{"$gte":4}}""", filter.Where!.ToString());
+    }
+
+    [Fact]
+    public void IntersectsTwoKeyConditions()
+        => Assert.Equal(["h2"], TranslateFilter(h => new[] { "h1", "h2" }.Contains(h.HotelId) && h.HotelId == "h2").Ids);
+
+    [Fact]
+    public void TranslatesDisjointKeyConditionsToNoRecord()
+        => Assert.True(TranslateFilter(h => h.HotelId == "h1" && h.HotelId == "h2").MatchesNothing);
+
+    [Fact]
+    public void TranslatesContainsOverAnEmptyListOfKeysToNoRecord()
+        => Assert.True(TranslateFilter(h => new string[0].Contains(h.HotelId)).MatchesNothing);
+
+    [Fact]
+    public void TranslatesAGuidKeyToItsId()
+    {
+        var key = new Guid("11111111-2222-3333-4444-555555555555");
+        var model = new ChromaModelBuilder().Build(typeof(Hotel<Guid>), typeof(Guid), definition: null, defaultEmbeddingGenerator: null);
+
+        var filter = new ChromaFilterTranslator().Translate((Expression<Func<Hotel<Guid>, bool>>)(h => h.HotelId == key), model);
+
+        Assert.Equal(["11111111-2222-3333-4444-555555555555"], filter.Ids);
+    }
+
+    [Fact]
+    public void ThrowsForAKeyInequality()
+        => Assert.Throws<NotSupportedException>(() => TranslateFilter(h => h.HotelId != "h1"));
+
+    [Fact]
+    public void ThrowsForAKeyConditionInsideAnOr()
+        => Assert.Throws<NotSupportedException>(() => TranslateFilter(h => h.HotelId == "h1" || h.Rating >= 4));
+
+    [Fact]
+    public void ThrowsForANegatedKeyCondition()
+        => Assert.Throws<NotSupportedException>(() => TranslateFilter(h => !(h.HotelId == "h1")));
 
     private static string Translate(Expression<Func<Hotel<string>, bool>> filter)
     {
-        var where = new ChromaFilterTranslator().Translate(filter, s_model);
-        Assert.NotNull(where);
+        var chromaFilter = TranslateFilter(filter);
+        Assert.Null(chromaFilter.Ids);
+        Assert.NotNull(chromaFilter.Where);
 
         // The JSON that ChromaDotNet.Client sends in the where clause.
-        return where.ToString()!;
+        return chromaFilter.Where.ToString()!;
+    }
+
+    private static ChromaFilter TranslateFilter(Expression<Func<Hotel<string>, bool>> filter)
+        => new ChromaFilterTranslator().Translate(filter, s_model);
+
+    private static void AssertMatchesAll(ChromaFilter filter)
+    {
+        Assert.Null(filter.Where);
+        Assert.Null(filter.Ids);
+        Assert.False(filter.MatchesNothing);
     }
 }

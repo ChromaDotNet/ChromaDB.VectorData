@@ -12,18 +12,95 @@ namespace ChromaDB.VectorData;
 // https://docs.trychroma.com/docs/querying-collections/metadata-filtering
 internal class ChromaFilterTranslator : FilterTranslatorBase
 {
+    private const string KeyFilterNotSupported
+        = "Chroma filters on the key only with == or Contains over a list of keys, joined to the other conditions with &&.";
+
     /// <summary>
-    /// Translate the filter to a Chroma where operator, or to <see langword="null"/> when it matches every record.
+    /// Translate the filter to the where clause and the ids of a Chroma request.
     /// </summary>
-    internal ChromaWhereOperator? Translate(LambdaExpression lambdaExpression, CollectionModel model)
+    internal ChromaFilter Translate(LambdaExpression lambdaExpression, CollectionModel model)
     {
         var preprocessedExpression = PreprocessFilter(lambdaExpression, model, new FilterPreprocessingOptions());
 
-        return Translate(preprocessedExpression, negated: false);
+        // The key of a record is its Chroma id, not a metadata field: conditions on it become the ids of the request.
+        List<string>? ids = null;
+        var condition = Condition.All;
+        foreach (var conjunct in GetConjuncts(preprocessedExpression))
+        {
+            if (TryTranslateKeyCondition(conjunct, out var keys))
+            {
+                ids = ids is null ? keys : ids.Intersect(keys).ToList();
+            }
+            else
+            {
+                condition = And(condition, Translate(conjunct, negated: false));
+            }
+        }
+
+        return condition.MatchesNothing ? ChromaFilter.Nothing : ChromaFilter.Create(condition.Where, ids);
+    }
+
+    private static IEnumerable<Expression> GetConjuncts(Expression expression)
+        => expression is BinaryExpression { NodeType: ExpressionType.AndAlso } andAlso
+            ? GetConjuncts(andAlso.Left).Concat(GetConjuncts(andAlso.Right))
+            : [expression];
+
+    // r.Key == "a", "a" == r.Key, or a list of keys that contains r.Key.
+    private bool TryTranslateKeyCondition(Expression expression, out List<string> ids)
+    {
+        switch (expression)
+        {
+            case BinaryExpression { NodeType: ExpressionType.Equal } equal
+                when TryBindKey(equal.Left) && TryGetConstant(equal.Right, out var value)
+                    || TryBindKey(equal.Right) && TryGetConstant(equal.Left, out value):
+                ids = [ToId(value)];
+                return true;
+
+            case MethodCallExpression methodCall
+                when TryMatchContains(methodCall, out var source, out var item) && TryBindKey(item):
+                IEnumerable keys = source switch
+                {
+                    NewArrayExpression newArray => GetInlineArrayElements(newArray),
+                    ConstantExpression { Value: IEnumerable enumerable and not string } => enumerable,
+                    _ => throw new NotSupportedException(KeyFilterNotSupported)
+                };
+                ids = keys.Cast<object?>().Select(ToId).Distinct().ToList();
+                return true;
+
+            default:
+                ids = [];
+                return false;
+        }
+
+        static string ToId(object? key)
+            => key is null
+                ? throw new NotSupportedException("Chroma does not support filtering on a null key.")
+                : ChromaFieldMapping.ToId(key);
+    }
+
+    private bool TryBindKey(Expression expression)
+        => TryBindProperty(expression, out var property) && property is KeyPropertyModel;
+
+    // Any other condition on the key, like != or inside ||, cannot be expressed with the ids of a request.
+    private bool TryBindDataProperty(Expression expression, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out PropertyModel? property)
+    {
+        if (!TryBindProperty(expression, out var bound))
+        {
+            property = null;
+            return false;
+        }
+
+        if (bound is KeyPropertyModel)
+        {
+            throw new NotSupportedException(KeyFilterNotSupported);
+        }
+
+        property = bound;
+        return true;
     }
 
     // Chroma has no $not, so a negation is pushed down to the comparisons it contains.
-    private ChromaWhereOperator? Translate(Expression? node, bool negated)
+    private Condition Translate(Expression? node, bool negated)
         => node switch
         {
             BinaryExpression { NodeType: ExpressionType.Equal } equal => TranslateEqual(equal.Left, equal.Right, negated),
@@ -52,21 +129,21 @@ internal class ChromaFilterTranslator : FilterTranslatorBase
                 => Translate(convert.Operand, negated),
 
             // Special handling for bool constant as the filter expression (r => r.Bool)
-            Expression when node.Type == typeof(bool) && TryBindProperty(node, out var property)
+            Expression when node.Type == typeof(bool) && TryBindDataProperty(node, out var property)
                 => ChromaWhereOperator.Equal(property.StorageName, !negated),
 
-            // Handle true literal (r => true), which is useful for fetching all records
-            ConstantExpression { Value: true } when !negated => null,
+            // r => true matches every record, which is useful for fetching all records, and r => false none.
+            ConstantExpression { Value: bool value } => value != negated ? Condition.All : Condition.Nothing,
 
             MethodCallExpression methodCall => TranslateMethodCall(methodCall, negated),
 
             _ => throw new NotSupportedException("Chroma does not support the following NodeType in filters: " + node?.NodeType)
         };
 
-    private ChromaWhereOperator TranslateEqual(Expression left, Expression right, bool negated)
-        => TryBindProperty(left, out var property) && TryGetConstant(right, out var rightConstant)
+    private Condition TranslateEqual(Expression left, Expression right, bool negated)
+        => TryBindDataProperty(left, out var property) && TryGetConstant(right, out var rightConstant)
             ? GenerateEqual(property.StorageName, rightConstant, negated)
-            : TryBindProperty(right, out property) && TryGetConstant(left, out var leftConstant)
+            : TryBindDataProperty(right, out property) && TryGetConstant(left, out var leftConstant)
                 ? GenerateEqual(property.StorageName, leftConstant, negated)
                 : throw new NotSupportedException("Invalid equality/comparison");
 
@@ -79,13 +156,13 @@ internal class ChromaFilterTranslator : FilterTranslatorBase
             : ChromaWhereOperator.Equal(propertyStorageName, metadataValue);
     }
 
-    private ChromaWhereOperator TranslateComparison(BinaryExpression comparison, bool negated)
+    private Condition TranslateComparison(BinaryExpression comparison, bool negated)
     {
         // Normalize to property-on-the-left.
         var (property, value, nodeType) =
-            TryBindProperty(comparison.Left, out var leftProperty) && TryGetConstant(comparison.Right, out var rightValue)
+            TryBindDataProperty(comparison.Left, out var leftProperty) && TryGetConstant(comparison.Right, out var rightValue)
                 ? (leftProperty, rightValue, comparison.NodeType)
-                : TryBindProperty(comparison.Right, out var rightProperty) && TryGetConstant(comparison.Left, out var leftValue)
+                : TryBindDataProperty(comparison.Right, out var rightProperty) && TryGetConstant(comparison.Left, out var leftValue)
                     ? (rightProperty, leftValue, Flip(comparison.NodeType))
                     : throw new NotSupportedException("Comparison expression not supported by Chroma");
 
@@ -149,14 +226,21 @@ internal class ChromaFilterTranslator : FilterTranslatorBase
         }
     }
 
-    private static ChromaWhereOperator? And(ChromaWhereOperator? left, ChromaWhereOperator? right)
-        => left is null ? right : right is null ? left : left & right;
+    // A side that matches no record makes the whole AND match no record.
+    private static Condition And(Condition left, Condition right)
+        => left.MatchesNothing || right.MatchesNothing ? Condition.Nothing
+            : left.Where is null ? right
+            : right.Where is null ? left
+            : left.Where & right.Where;
 
-    // A side that matches every record makes the whole OR match every record.
-    private static ChromaWhereOperator? Or(ChromaWhereOperator? left, ChromaWhereOperator? right)
-        => left is null || right is null ? null : left | right;
+    // A side that matches every record makes the whole OR match every record, and a side that matches none drops out.
+    private static Condition Or(Condition left, Condition right)
+        => left.MatchesNothing ? right
+            : right.MatchesNothing ? left
+            : left.Where is null || right.Where is null ? Condition.All
+            : left.Where | right.Where;
 
-    private ChromaWhereOperator? TranslateMethodCall(MethodCallExpression methodCall, bool negated)
+    private Condition TranslateMethodCall(MethodCallExpression methodCall, bool negated)
         => methodCall switch
         {
             // Enumerable.Contains(), List.Contains(), MemoryExtensions.Contains()
@@ -171,12 +255,12 @@ internal class ChromaFilterTranslator : FilterTranslatorBase
             _ => throw new NotSupportedException($"Unsupported method call: {methodCall.Method.DeclaringType?.Name}.{methodCall.Method.Name}")
         };
 
-    private ChromaWhereOperator? TranslateContains(Expression source, Expression item, bool negated)
+    private Condition TranslateContains(Expression source, Expression item, bool negated)
     {
         switch (source)
         {
             // Contains over field enumerable
-            case var _ when TryBindProperty(source, out var property):
+            case var _ when TryBindDataProperty(source, out var property):
                 if (!TryGetConstant(item, out var value))
                 {
                     throw new NotSupportedException("Unsupported item in Contains");
@@ -197,9 +281,9 @@ internal class ChromaFilterTranslator : FilterTranslatorBase
                 throw new NotSupportedException("Unsupported Contains");
         }
 
-        ChromaWhereOperator? ProcessInlineEnumerable(IEnumerable elements, Expression item)
+        Condition ProcessInlineEnumerable(IEnumerable elements, Expression item)
         {
-            if (!TryBindProperty(item, out var property))
+            if (!TryBindDataProperty(item, out var property))
             {
                 throw new NotSupportedException("Unsupported item type in Contains");
             }
@@ -208,10 +292,9 @@ internal class ChromaFilterTranslator : FilterTranslatorBase
 
             return values.Length switch
             {
-                // Chroma rejects $in and $nin without values. Contains over no values matches no record,
-                // and its negation matches every record.
-                0 when negated => null,
-                0 => throw new NotSupportedException("Chroma cannot filter on Contains over an empty array."),
+                // Contains over no values matches no record, and its negation matches every record;
+                // Chroma rejects $in and $nin without values, so neither is sent.
+                0 => negated ? Condition.All : Condition.Nothing,
 
                 _ => negated
                     ? ChromaWhereOperator.NotIn(property.StorageName, values)
@@ -221,9 +304,9 @@ internal class ChromaFilterTranslator : FilterTranslatorBase
     }
 
     // r.Strings.Any(s => array.Contains(s)) is true when the field contains at least one of the values.
-    private ChromaWhereOperator? TranslateAny(Expression source, LambdaExpression lambda, bool negated)
+    private Condition TranslateAny(Expression source, LambdaExpression lambda, bool negated)
     {
-        if (!TryBindProperty(source, out var property)
+        if (!TryBindDataProperty(source, out var property)
             || lambda.Body is not MethodCallExpression containsCall
             || !TryMatchContains(containsCall, out var valuesExpression, out var itemExpression)
             || itemExpression != lambda.Parameters[0])
@@ -247,8 +330,7 @@ internal class ChromaFilterTranslator : FilterTranslatorBase
         return conditions.Count switch
         {
             // Any() over no values matches no record, and its negation matches every record.
-            0 when negated => null,
-            0 => throw new NotSupportedException("Chroma cannot filter on Any() over an empty array."),
+            0 => negated ? Condition.All : Condition.Nothing,
 
             // !(contains a || contains b) is !contains a && !contains b.
             _ => conditions.Aggregate((left, right) => negated ? left & right : left | right)
@@ -275,4 +357,24 @@ internal class ChromaFilterTranslator : FilterTranslatorBase
             IList => throw new NotSupportedException("Chroma does not support comparing an array property with an array."),
             var metadataValue => metadataValue
         };
+
+    // A condition on the metadata: a where clause, every record (no where clause), or no record.
+    private readonly struct Condition
+    {
+        private Condition(ChromaWhereOperator? where, bool matchesNothing)
+        {
+            Where = where;
+            MatchesNothing = matchesNothing;
+        }
+
+        public static Condition All => default;
+
+        public static Condition Nothing => new(where: null, matchesNothing: true);
+
+        public ChromaWhereOperator? Where { get; }
+
+        public bool MatchesNothing { get; }
+
+        public static implicit operator Condition(ChromaWhereOperator where) => new(where, matchesNothing: false);
+    }
 }

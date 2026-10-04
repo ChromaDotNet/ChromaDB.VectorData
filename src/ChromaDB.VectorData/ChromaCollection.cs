@@ -192,7 +192,7 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
 
         Throw.IfNull(keys);
 
-        var ids = keys.Select(key => ChromaMapper<TRecord>.ToId(key)).ToList();
+        var ids = keys.Select(key => ChromaFieldMapping.ToId(key)).ToList();
         if (ids.Count == 0)
         {
             yield break;
@@ -234,7 +234,7 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
     {
         Throw.IfNull(keys);
 
-        var ids = keys.Select(key => ChromaMapper<TRecord>.ToId(key)).ToList();
+        var ids = keys.Select(key => ChromaFieldMapping.ToId(key)).ToList();
         if (ids.Count == 0)
         {
             return Task.CompletedTask;
@@ -336,9 +336,13 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
         var vectorProperty = _model.GetVectorPropertyOrSingle(options);
         var vector = await GetSearchVectorAsync(searchValue, vectorProperty, cancellationToken).ConfigureAwait(false);
 
-        var where = options.Filter is not null
+        var filter = options.Filter is not null
             ? new ChromaFilterTranslator().Translate(options.Filter, _model)
-            : null;
+            : ChromaFilter.All;
+        if (filter.MatchesNothing)
+        {
+            yield break;
+        }
 
         var include = ChromaQueryInclude.Metadatas | ChromaQueryInclude.Distances;
         if (options.IncludeVectors)
@@ -353,7 +357,8 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
                 await GetChromaCollectionAsync(cancellationToken).ConfigureAwait(false),
                 vector,
                 top + options.Skip,
-                where,
+                filter.Where,
+                filter.Ids,
                 include,
                 cancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
 
@@ -402,14 +407,18 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
             throw new NotSupportedException("Chroma does not support ordering.");
         }
 
-        var where = new ChromaFilterTranslator().Translate(filter, _model);
+        var chromaFilter = new ChromaFilterTranslator().Translate(filter, _model);
+        if (chromaFilter.MatchesNothing)
+        {
+            yield break;
+        }
 
         var entries = await RunOperationAsync(
             "Get",
             async () => await _chromaClient.GetAsync(
                 await GetChromaCollectionAsync(cancellationToken).ConfigureAwait(false),
-                ids: null,
-                where,
+                chromaFilter.Ids,
+                chromaFilter.Where,
                 limit: top,
                 offset: options.Skip,
                 GetInclude(options.IncludeVectors),

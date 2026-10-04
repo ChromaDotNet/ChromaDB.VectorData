@@ -145,7 +145,7 @@ public class ChromaCollectionTests
         // Arrange.
         using var sut = this.CreateCollection<string, Hotel<string>>();
         this._chromaClientMock
-            .Setup(x => x.QueryAsync(this._chromaCollection, It.IsAny<ReadOnlyMemory<float>>(), 3, null, ChromaQueryInclude.Metadatas | ChromaQueryInclude.Distances, this._testCancellationToken))
+            .Setup(x => x.QueryAsync(this._chromaCollection, It.IsAny<ReadOnlyMemory<float>>(), 3, null, null, ChromaQueryInclude.Metadatas | ChromaQueryInclude.Distances, this._testCancellationToken))
             .ReturnsAsync(
             [
                 new ChromaCollectionQueryEntry("skipped") { Distance = 0.1f },
@@ -160,6 +160,78 @@ public class ChromaCollectionTests
         var result = Assert.Single(results);
         Assert.Equal("kept", result.Record.HotelId);
         Assert.Equal(0.8, result.Score!.Value, precision: 6);
+    }
+
+    [Fact]
+    public async Task SearchSendsTheKeysOfTheFilterAsIdsAsync()
+    {
+        // Arrange.
+        using var sut = this.CreateCollection<string, Hotel<string>>();
+        this._chromaClientMock
+            .Setup(x => x.QueryAsync(
+                this._chromaCollection,
+                It.IsAny<ReadOnlyMemory<float>>(),
+                2,
+                null,
+                It.Is<List<string>>(ids => ids.SequenceEqual(new[] { "h1", "h2" })),
+                ChromaQueryInclude.Metadatas | ChromaQueryInclude.Distances,
+                this._testCancellationToken))
+            .ReturnsAsync([new ChromaCollectionQueryEntry("h1") { Distance = 0.1f }]);
+
+        // Act.
+        var results = await sut.SearchAsync(new ReadOnlyMemory<float>([1, 2, 3, 4]), top: 2, new() { Filter = h => new[] { "h1", "h2" }.Contains(h.HotelId) }, this._testCancellationToken).ToListAsync();
+
+        // Assert.
+        Assert.Equal("h1", Assert.Single(results).Record.HotelId);
+    }
+
+    [Fact]
+    public async Task GetSendsTheKeysOfTheFilterAsIdsAsync()
+    {
+        // Arrange.
+        using var sut = this.CreateCollection<string, Hotel<string>>();
+        this._chromaClientMock
+            .Setup(x => x.GetAsync(
+                this._chromaCollection,
+                It.Is<List<string>>(ids => ids.SequenceEqual(new[] { "h1" })),
+                It.IsNotNull<ChromaWhereOperator>(),
+                5,
+                0,
+                ChromaGetInclude.Metadatas,
+                this._testCancellationToken))
+            .ReturnsAsync([new ChromaCollectionEntry("h1")]);
+
+        // Act.
+        var results = await sut.GetAsync(h => h.HotelId == "h1" && h.Parking, top: 5, cancellationToken: this._testCancellationToken).ToListAsync();
+
+        // Assert.
+        Assert.Equal("h1", Assert.Single(results).HotelId);
+    }
+
+    [Fact]
+    public async Task SearchWithAFilterThatMatchesNoRecordSendsNoRequestAsync()
+    {
+        // Arrange: the strict mock fails on any request that was not set up.
+        using var sut = this.CreateCollection<string, Hotel<string>>();
+
+        // Act.
+        var results = await sut.SearchAsync(new ReadOnlyMemory<float>([1, 2, 3, 4]), top: 2, new() { Filter = h => new string[0].Contains(h.HotelName) }, this._testCancellationToken).ToListAsync();
+
+        // Assert.
+        Assert.Empty(results);
+    }
+
+    [Fact]
+    public async Task GetWithAFilterThatMatchesNoRecordSendsNoRequestAsync()
+    {
+        // Arrange: the strict mock fails on any request that was not set up.
+        using var sut = this.CreateCollection<string, Hotel<string>>();
+
+        // Act.
+        var results = await sut.GetAsync(h => h.HotelId == "h1" && h.HotelId == "h2", top: 5, cancellationToken: this._testCancellationToken).ToListAsync();
+
+        // Assert.
+        Assert.Empty(results);
     }
 
     [Fact]

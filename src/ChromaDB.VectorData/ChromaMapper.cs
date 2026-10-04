@@ -19,17 +19,6 @@ internal readonly record struct ChromaStorageRecord(string Id, ReadOnlyMemory<fl
 internal sealed class ChromaMapper<TRecord>(CollectionModel model)
     where TRecord : class
 {
-    /// <summary>
-    /// Convert the given key to a Chroma record id.
-    /// </summary>
-    public static string ToId(object key)
-        => key switch
-        {
-            string id => id,
-            Guid id => id.ToString("D"),
-            _ => throw new NotSupportedException($"The provided key type '{key.GetType().Name}' is not supported by Chroma.")
-        };
-
     public ChromaStorageRecord MapFromDataToStorageModel(TRecord dataModel, int recordIndex, GeneratedEmbeddings<Embedding<float>>?[]? generatedEmbeddings)
     {
         var keyProperty = model.KeyProperty;
@@ -56,7 +45,7 @@ internal sealed class ChromaMapper<TRecord>(CollectionModel model)
                 ? model.VectorProperty.GetValueAsObject(dataModel)
                 : generatedEmbeddings[0]![recordIndex]);
 
-        return new ChromaStorageRecord(ToId(key), embedding, metadata);
+        return new ChromaStorageRecord(ChromaFieldMapping.ToId(key), embedding, metadata);
 
         static ReadOnlyMemory<float> GetVector(PropertyModel property, object? embedding)
             => embedding switch

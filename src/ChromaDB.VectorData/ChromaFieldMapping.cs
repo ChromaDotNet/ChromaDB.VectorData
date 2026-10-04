@@ -13,6 +13,17 @@ namespace ChromaDB.VectorData;
 internal static class ChromaFieldMapping
 {
     /// <summary>
+    /// Convert the given key to a Chroma record id.
+    /// </summary>
+    public static string ToId(object key)
+        => key switch
+        {
+            string id => id,
+            Guid id => id.ToString("D"),
+            _ => throw new NotSupportedException($"The provided key type '{key.GetType().Name}' is not supported by Chroma.")
+        };
+
+    /// <summary>
     /// Convert the given <paramref name="sourceValue"/> to a value that can be stored in Chroma metadata.
     /// </summary>
     /// <param name="sourceValue">The object to convert.</param>

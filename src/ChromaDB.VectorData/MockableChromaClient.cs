@@ -142,16 +142,24 @@ internal class MockableChromaClient : IDisposable
     /// <param name="queryEmbedding">The vector to search for.</param>
     /// <param name="nResults">The number of records to return.</param>
     /// <param name="where">The metadata filter, or <see langword="null"/> for no filter.</param>
+    /// <param name="ids">The ids the records must have, or <see langword="null"/> for any id.</param>
     /// <param name="include">The fields to return.</param>
     /// <param name="cancellationToken">The token to monitor for cancellation requests.</param>
-    public virtual Task<List<ChromaCollectionQueryEntry>> QueryAsync(
+    public virtual async Task<List<ChromaCollectionQueryEntry>> QueryAsync(
         ChromaCollection collection,
         ReadOnlyMemory<float> queryEmbedding,
         int nResults,
         ChromaWhereOperator? where,
+        List<string>? ids,
         ChromaQueryInclude include,
         CancellationToken cancellationToken = default)
-        => GetCollectionClient(collection).Query(queryEmbedding, nResults, where, whereDocument: null, include, cancellationToken);
+    {
+        var results = await GetCollectionClient(collection).Query(
+            new ChromaQuery([queryEmbedding]) { NResults = nResults, Where = where, Ids = ids, Include = include },
+            cancellationToken).ConfigureAwait(false);
+
+        return results[0];
+    }
 
     /// <summary>
     /// Insert or update records.
