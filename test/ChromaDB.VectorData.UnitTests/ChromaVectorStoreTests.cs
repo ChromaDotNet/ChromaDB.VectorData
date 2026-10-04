@@ -39,6 +39,24 @@ public class ChromaVectorStoreTests
         Assert.Equal(ChromaMetadataValues.Inferred, chromaClient.Options.MetadataValues);
     }
 
+    [Theory]
+    [InlineData("hotels_db")]
+    [InlineData(null)]
+    public void MetadataNamesTheDatabaseOfTheClient(string? database)
+    {
+        // Arrange.
+        using var httpClient = new HttpClient();
+        var chromaClient = new ChromaClient(new ChromaConfigurationOptions("http://localhost:8000", defaultDatabase: database), httpClient);
+
+        // Act.
+        using var sut = new ChromaVectorStore(chromaClient);
+        using var collection = sut.GetCollection<string, Hotel<string>>(TestCollectionName);
+
+        // Assert.
+        Assert.Equal(database, Assert.IsType<VectorStoreMetadata>(sut.GetService(typeof(VectorStoreMetadata))).VectorStoreName);
+        Assert.Equal(database, Assert.IsType<VectorStoreCollectionMetadata>(collection.GetService(typeof(VectorStoreCollectionMetadata))).VectorStoreName);
+    }
+
     [Fact]
     public async Task DisposeLeavesTheHttpClientOfTheCallerAsync()
     {

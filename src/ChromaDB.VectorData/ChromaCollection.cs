@@ -120,15 +120,16 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
         _model = modelFactory(options);
         _mapper = new ChromaMapper<TRecord>(_model);
 
-        _collectionMetadata = new()
-        {
-            VectorStoreSystemName = ChromaConstants.VectorStoreSystemName,
-            CollectionName = name
-        };
-
         // The code above can throw, so we need to create the client after the model is built and verified.
         // In case an exception is thrown, we don't need to dispose any resources.
         _chromaClient = clientFactory();
+
+        _collectionMetadata = new()
+        {
+            VectorStoreSystemName = ChromaConstants.VectorStoreSystemName,
+            VectorStoreName = _chromaClient.DatabaseName,
+            CollectionName = name
+        };
     }
 
     /// <inheritdoc />

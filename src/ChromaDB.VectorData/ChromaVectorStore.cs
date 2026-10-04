@@ -68,7 +68,8 @@ public sealed class ChromaVectorStore : VectorStore
 
         _metadata = new()
         {
-            VectorStoreSystemName = ChromaConstants.VectorStoreSystemName
+            VectorStoreSystemName = ChromaConstants.VectorStoreSystemName,
+            VectorStoreName = chromaClient.DatabaseName
         };
     }
 

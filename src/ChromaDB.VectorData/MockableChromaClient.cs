@@ -60,6 +60,11 @@ internal class MockableChromaClient : IDisposable
     /// </summary>
     public ChromaClient ChromaClient => _chromaClient;
 
+    /// <summary>
+    /// Gets the database the client works in, or <see langword="null"/> for the default database of the server.
+    /// </summary>
+    public string? DatabaseName => _chromaClient?.Options.Database;
+
     public void Dispose()
     {
         if (_ownedHttpClient is not null && Interlocked.Decrement(ref _referenceCount) == 0)
