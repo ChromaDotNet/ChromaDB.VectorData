@@ -1,19 +1,18 @@
-﻿// Licensed to the .NET Foundation under one or more agreements.
+// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
-using Grpc.Core;
+using ChromaDB.Client;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.VectorData;
 using Microsoft.Extensions.VectorData.ProviderServices;
-using Qdrant.Client;
 using Microsoft.Shared.Diagnostics;
 
 namespace ChromaDB.VectorData;
 
 /// <summary>
-/// Class for accessing the list of collections in a Qdrant vector store.
+/// Class for accessing the list of collections in a Chroma vector store.
 /// </summary>
 /// <remarks>
 /// This class can be used with collections of any schema type, but requires you to provide schema information when getting a collection.
@@ -23,41 +22,38 @@ public sealed class ChromaVectorStore : VectorStore
     /// <summary>Metadata about vector store.</summary>
     private readonly VectorStoreMetadata _metadata;
 
-    /// <summary>Qdrant client that can be used to manage the collections and points in a Qdrant store.</summary>
-    private readonly MockableChromaClient _qdrantClient;
+    /// <summary>Chroma client that can be used to manage the collections and records in a Chroma store.</summary>
+    private readonly MockableChromaClient _chromaClient;
 
     /// <summary>A general purpose definition that can be used to construct a collection when needing to proxy schema agnostic operations.</summary>
-    private static readonly VectorStoreCollectionDefinition s_generalPurposeDefinition = new() { Properties = [new VectorStoreKeyProperty("Key", typeof(ulong)), new VectorStoreVectorProperty("Vector", typeof(ReadOnlyMemory<float>), 1)] };
-
-    /// <summary>Whether the vectors in the store are named and multiple vectors are supported, or whether there is just a single unnamed vector per qdrant point.</summary>
-    private readonly bool _hasNamedVectors;
+    private static readonly VectorStoreCollectionDefinition s_generalPurposeDefinition = new() { Properties = [new VectorStoreKeyProperty("Key", typeof(string)), new VectorStoreVectorProperty("Vector", typeof(ReadOnlyMemory<float>), 1)] };
 
     private readonly IEmbeddingGenerator? _embeddingGenerator;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ChromaVectorStore"/> class.
     /// </summary>
-    /// <param name="qdrantClient">Qdrant client that can be used to manage the collections and points in a Qdrant store.</param>
-    /// <param name="ownsClient">A value indicating whether <paramref name="qdrantClient"/> is disposed after the vector store is disposed.</param>
+    /// <param name="chromaOptions">The options used to connect to Chroma.</param>
+    /// <param name="httpClient">The <see cref="HttpClient"/> used to send the requests to Chroma.</param>
+    /// <param name="ownsClient">A value indicating whether <paramref name="httpClient"/> is disposed after the vector store is disposed.</param>
     /// <param name="options">Optional configuration options for this class.</param>
-    public ChromaVectorStore(QdrantClient qdrantClient, bool ownsClient, ChromaVectorStoreOptions? options = default)
-        : this(new MockableChromaClient(qdrantClient, ownsClient), options)
+    public ChromaVectorStore(ChromaConfigurationOptions chromaOptions, HttpClient httpClient, bool ownsClient, ChromaVectorStoreOptions? options = default)
+        : this(new MockableChromaClient(chromaOptions, httpClient, ownsClient), options)
     {
     }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ChromaVectorStore"/> class.
     /// </summary>
-    /// <param name="qdrantClient">Qdrant client that can be used to manage the collections and points in a Qdrant store.</param>
+    /// <param name="chromaClient">Chroma client that can be used to manage the collections and records in a Chroma store.</param>
     /// <param name="options">Optional configuration options for this class.</param>
-    internal ChromaVectorStore(MockableChromaClient qdrantClient, ChromaVectorStoreOptions? options = default)
+    internal ChromaVectorStore(MockableChromaClient chromaClient, ChromaVectorStoreOptions? options = default)
     {
-        Throw.IfNull(qdrantClient);
+        Throw.IfNull(chromaClient);
 
-        _qdrantClient = qdrantClient;
+        _chromaClient = chromaClient;
 
         options ??= ChromaVectorStoreOptions.Default;
-        _hasNamedVectors = options.HasNamedVectors;
         _embeddingGenerator = options.EmbeddingGenerator;
 
         _metadata = new()
@@ -69,14 +65,14 @@ public sealed class ChromaVectorStore : VectorStore
     /// <inheritdoc/>
     protected override void Dispose(bool disposing)
     {
-        _qdrantClient.Dispose();
+        _chromaClient.Dispose();
         base.Dispose(disposing);
     }
 
 #pragma warning disable IDE0090 // Use 'new(...)'
     /// <inheritdoc />
     [RequiresDynamicCode("This overload of GetCollection() is incompatible with NativeAOT. For dynamic mapping via Dictionary<string, object?>, call GetDynamicCollection() instead.")]
-    [RequiresUnreferencedCode("This overload of GetCollecttion() is incompatible with trimming. For dynamic mapping via Dictionary<string, object?>, call GetDynamicCollection() instead.")]
+    [RequiresUnreferencedCode("This overload of GetCollection() is incompatible with trimming. For dynamic mapping via Dictionary<string, object?>, call GetDynamicCollection() instead.")]
 #if NET
     public override ChromaCollection<TKey, TRecord> GetCollection<TKey, TRecord>(string name, VectorStoreCollectionDefinition? definition = null)
 #else
@@ -84,9 +80,8 @@ public sealed class ChromaVectorStore : VectorStore
 #endif
         => typeof(TRecord) == typeof(Dictionary<string, object?>)
             ? throw new ArgumentException(VectorDataStrings.GetCollectionWithDictionaryNotSupported)
-            : new ChromaCollection<TKey, TRecord>(_qdrantClient.Share, name, new()
+            : new ChromaCollection<TKey, TRecord>(_chromaClient.Share, name, new()
             {
-                HasNamedVectors = _hasNamedVectors,
                 Definition = definition,
                 EmbeddingGenerator = _embeddingGenerator
             });
@@ -97,9 +92,8 @@ public sealed class ChromaVectorStore : VectorStore
 #else
     public override VectorStoreCollection<object, Dictionary<string, object?>> GetDynamicCollection(string name, VectorStoreCollectionDefinition definition)
 #endif
-        => new ChromaDynamicCollection(_qdrantClient.Share, name, new ChromaCollectionOptions()
+        => new ChromaDynamicCollection(_chromaClient.Share, name, new ChromaCollectionOptions()
         {
-            HasNamedVectors = _hasNamedVectors,
             Definition = definition,
             EmbeddingGenerator = _embeddingGenerator
         });
@@ -108,10 +102,13 @@ public sealed class ChromaVectorStore : VectorStore
     /// <inheritdoc />
     public override async IAsyncEnumerable<string> ListCollectionNamesAsync([EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var collections = await VectorStoreErrorHandler.RunOperationAsync<IReadOnlyList<string>, RpcException>(
+        var collections = await VectorStoreErrorHandler.RunOperationAsync<IReadOnlyList<string>, HttpRequestException>(
             _metadata,
             "ListCollections",
-            () => _qdrantClient.ListCollectionsAsync(cancellationToken)).ConfigureAwait(false);
+            () => VectorStoreErrorHandler.RunOperationAsync<IReadOnlyList<string>, ChromaException>(
+                _metadata,
+                "ListCollections",
+                () => _chromaClient.ListCollectionsAsync(cancellationToken))).ConfigureAwait(false);
 
         foreach (var collection in collections)
         {
@@ -141,7 +138,7 @@ public sealed class ChromaVectorStore : VectorStore
         return
             serviceKey is not null ? null :
             serviceType == typeof(VectorStoreMetadata) ? _metadata :
-            serviceType == typeof(QdrantClient) ? _qdrantClient.QdrantClient :
+            serviceType == typeof(ChromaClient) ? _chromaClient.ChromaClient :
             serviceType.IsInstanceOfType(this) ? this :
             null;
     }
