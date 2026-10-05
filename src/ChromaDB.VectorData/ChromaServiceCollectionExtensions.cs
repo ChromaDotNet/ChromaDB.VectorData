@@ -15,8 +15,8 @@ namespace Microsoft.Extensions.DependencyInjection;
 /// </summary>
 public static class ChromaServiceCollectionExtensions
 {
-    private const string DynamicCodeMessage = "This method is incompatible with NativeAOT, consult the documentation for adding collections in a way that's compatible with NativeAOT.";
-    private const string UnreferencedCodeMessage = "This method is incompatible with trimming, consult the documentation for adding collections in a way that's compatible with NativeAOT.";
+    private const string DynamicCodeMessage = "The collection maps the properties of the record type by reflection, which NativeAOT does not support. With NativeAOT, register the vector store and get a ChromaDynamicCollection from it with GetDynamicCollection.";
+    private const string UnreferencedCodeMessage = "The collection maps the properties of the record type by reflection, which trimming can break. With trimming, register the vector store and get a ChromaDynamicCollection from it with GetDynamicCollection.";
 
     /// <summary>
     /// Registers a <see cref="ChromaVectorStore"/> as <see cref="VectorStore"/>
@@ -24,8 +24,6 @@ public static class ChromaServiceCollectionExtensions
     /// or retrieved from the dependency injection container if <paramref name="clientProvider"/> was not provided.
     /// </summary>
     /// <inheritdoc cref="AddKeyedChromaVectorStore(IServiceCollection, object?, Func{IServiceProvider, ChromaClient}?, Func{IServiceProvider, ChromaVectorStoreOptions}?, ServiceLifetime)"/>
-    [RequiresUnreferencedCode(DynamicCodeMessage)]
-    [RequiresDynamicCode(UnreferencedCodeMessage)]
     public static IServiceCollection AddChromaVectorStore(
         this IServiceCollection services,
         Func<IServiceProvider, ChromaClient>? clientProvider = default,
@@ -44,8 +42,6 @@ public static class ChromaServiceCollectionExtensions
     /// <param name="optionsProvider">Options provider to further configure the <see cref="ChromaVectorStore"/>.</param>
     /// <param name="lifetime">The service lifetime for the store. Defaults to <see cref="ServiceLifetime.Singleton"/>.</param>
     /// <returns>Service collection.</returns>
-    [RequiresUnreferencedCode(DynamicCodeMessage)]
-    [RequiresDynamicCode(UnreferencedCodeMessage)]
     public static IServiceCollection AddKeyedChromaVectorStore(
         this IServiceCollection services,
         object? serviceKey,
@@ -69,8 +65,6 @@ public static class ChromaServiceCollectionExtensions
     /// that connects to the Chroma server at <paramref name="uri"/>.
     /// </summary>
     /// <inheritdoc cref="AddKeyedChromaVectorStore(IServiceCollection, object?, string, ChromaVectorStoreOptions?, ServiceLifetime)"/>
-    [RequiresUnreferencedCode(DynamicCodeMessage)]
-    [RequiresDynamicCode(UnreferencedCodeMessage)]
     public static IServiceCollection AddChromaVectorStore(
         this IServiceCollection services,
         string uri,
@@ -88,8 +82,6 @@ public static class ChromaServiceCollectionExtensions
     /// <param name="options">Options to further configure the <see cref="ChromaVectorStore"/>.</param>
     /// <param name="lifetime">The service lifetime for the store. Defaults to <see cref="ServiceLifetime.Singleton"/>.</param>
     /// <returns>Service collection.</returns>
-    [RequiresUnreferencedCode(DynamicCodeMessage)]
-    [RequiresDynamicCode(UnreferencedCodeMessage)]
     public static IServiceCollection AddKeyedChromaVectorStore(
         this IServiceCollection services,
         object? serviceKey,
@@ -107,8 +99,6 @@ public static class ChromaServiceCollectionExtensions
     /// that connects to Chroma with <paramref name="chromaOptions"/>, like a token, a tenant and a database for Chroma Cloud.
     /// </summary>
     /// <inheritdoc cref="AddKeyedChromaVectorStore(IServiceCollection, object?, ChromaConfigurationOptions, ChromaVectorStoreOptions?, ServiceLifetime)"/>
-    [RequiresUnreferencedCode(DynamicCodeMessage)]
-    [RequiresDynamicCode(UnreferencedCodeMessage)]
     public static IServiceCollection AddChromaVectorStore(
         this IServiceCollection services,
         ChromaConfigurationOptions chromaOptions,
@@ -126,8 +116,6 @@ public static class ChromaServiceCollectionExtensions
     /// <param name="options">Options to further configure the <see cref="ChromaVectorStore"/>.</param>
     /// <param name="lifetime">The service lifetime for the store. Defaults to <see cref="ServiceLifetime.Singleton"/>.</param>
     /// <returns>Service collection.</returns>
-    [RequiresUnreferencedCode(DynamicCodeMessage)]
-    [RequiresDynamicCode(UnreferencedCodeMessage)]
     public static IServiceCollection AddKeyedChromaVectorStore(
         this IServiceCollection services,
         object? serviceKey,
@@ -166,8 +154,8 @@ public static class ChromaServiceCollectionExtensions
     /// or retrieved from the dependency injection container if <paramref name="clientProvider"/> was not provided.
     /// </summary>
     /// <inheritdoc cref="AddKeyedChromaCollection{TKey, TRecord}(IServiceCollection, object?, string, Func{IServiceProvider, ChromaClient}?, Func{IServiceProvider, ChromaCollectionOptions}?, ServiceLifetime)"/>
-    [RequiresUnreferencedCode(DynamicCodeMessage)]
-    [RequiresDynamicCode(UnreferencedCodeMessage)]
+    [RequiresUnreferencedCode(UnreferencedCodeMessage)]
+    [RequiresDynamicCode(DynamicCodeMessage)]
     public static IServiceCollection AddChromaCollection<TKey, TRecord>(
         this IServiceCollection services,
         string name,
@@ -190,8 +178,8 @@ public static class ChromaServiceCollectionExtensions
     /// <param name="optionsProvider">Options provider to further configure the <see cref="ChromaCollection{TKey, TRecord}"/>.</param>
     /// <param name="lifetime">The service lifetime for the store. Defaults to <see cref="ServiceLifetime.Singleton"/>.</param>
     /// <returns>Service collection.</returns>
-    [RequiresUnreferencedCode(DynamicCodeMessage)]
-    [RequiresDynamicCode(UnreferencedCodeMessage)]
+    [RequiresUnreferencedCode(UnreferencedCodeMessage)]
+    [RequiresDynamicCode(DynamicCodeMessage)]
     public static IServiceCollection AddKeyedChromaCollection<TKey, TRecord>(
         this IServiceCollection services,
         object? serviceKey,
@@ -219,8 +207,8 @@ public static class ChromaServiceCollectionExtensions
     /// that connects to the Chroma server at <paramref name="uri"/>.
     /// </summary>
     /// <inheritdoc cref="AddKeyedChromaCollection{TKey, TRecord}(IServiceCollection, object?, string, string, ChromaCollectionOptions?, ServiceLifetime)"/>
-    [RequiresUnreferencedCode(DynamicCodeMessage)]
-    [RequiresDynamicCode(UnreferencedCodeMessage)]
+    [RequiresUnreferencedCode(UnreferencedCodeMessage)]
+    [RequiresDynamicCode(DynamicCodeMessage)]
     public static IServiceCollection AddChromaCollection<TKey, TRecord>(
         this IServiceCollection services,
         string name,
@@ -242,8 +230,8 @@ public static class ChromaServiceCollectionExtensions
     /// <param name="options">Options to further configure the <see cref="ChromaCollection{TKey, TRecord}"/>.</param>
     /// <param name="lifetime">The service lifetime for the store. Defaults to <see cref="ServiceLifetime.Singleton"/>.</param>
     /// <returns>Service collection.</returns>
-    [RequiresUnreferencedCode(DynamicCodeMessage)]
-    [RequiresDynamicCode(UnreferencedCodeMessage)]
+    [RequiresUnreferencedCode(UnreferencedCodeMessage)]
+    [RequiresDynamicCode(DynamicCodeMessage)]
     public static IServiceCollection AddKeyedChromaCollection<TKey, TRecord>(
         this IServiceCollection services,
         object? serviceKey,
@@ -264,8 +252,8 @@ public static class ChromaServiceCollectionExtensions
     /// that connects to Chroma with <paramref name="chromaOptions"/>, like a token, a tenant and a database for Chroma Cloud.
     /// </summary>
     /// <inheritdoc cref="AddKeyedChromaCollection{TKey, TRecord}(IServiceCollection, object?, string, ChromaConfigurationOptions, ChromaCollectionOptions?, ServiceLifetime)"/>
-    [RequiresUnreferencedCode(DynamicCodeMessage)]
-    [RequiresDynamicCode(UnreferencedCodeMessage)]
+    [RequiresUnreferencedCode(UnreferencedCodeMessage)]
+    [RequiresDynamicCode(DynamicCodeMessage)]
     public static IServiceCollection AddChromaCollection<TKey, TRecord>(
         this IServiceCollection services,
         string name,
@@ -287,8 +275,8 @@ public static class ChromaServiceCollectionExtensions
     /// <param name="options">Options to further configure the <see cref="ChromaCollection{TKey, TRecord}"/>.</param>
     /// <param name="lifetime">The service lifetime for the store. Defaults to <see cref="ServiceLifetime.Singleton"/>.</param>
     /// <returns>Service collection.</returns>
-    [RequiresUnreferencedCode(DynamicCodeMessage)]
-    [RequiresDynamicCode(UnreferencedCodeMessage)]
+    [RequiresUnreferencedCode(UnreferencedCodeMessage)]
+    [RequiresDynamicCode(DynamicCodeMessage)]
     public static IServiceCollection AddKeyedChromaCollection<TKey, TRecord>(
         this IServiceCollection services,
         object? serviceKey,
@@ -309,8 +297,8 @@ public static class ChromaServiceCollectionExtensions
             _ => options!);
     }
 
-    [RequiresUnreferencedCode(DynamicCodeMessage)]
-    [RequiresDynamicCode(UnreferencedCodeMessage)]
+    [RequiresUnreferencedCode(UnreferencedCodeMessage)]
+    [RequiresDynamicCode(DynamicCodeMessage)]
     private static IServiceCollection AddKeyedChromaCollection<TKey, TRecord>(
         IServiceCollection services,
         object? serviceKey,

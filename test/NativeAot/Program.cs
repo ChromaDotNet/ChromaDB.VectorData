@@ -3,6 +3,7 @@
 
 using ChromaDB.Client;
 using ChromaDB.VectorData;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.VectorData;
 
 // The dynamic collection is the way to use the provider with NativeAOT: it takes the schema as a definition,
@@ -55,6 +56,13 @@ try
 
     var filtered = await collection.GetAsync(r => (int)r["Rating"]! >= 4, top: 10).ToListAsync();
     Check("a filter selects the records", filtered.Count == 1 && filtered[0]["Key"] is "a");
+
+    // The vector store registered with dependency injection, without reflection too: its collections are dynamic.
+    var services = new ServiceCollection();
+    services.AddChromaVectorStore(new ChromaConfigurationOptions(uri));
+    await using var serviceProvider = services.BuildServiceProvider();
+    using var registered = serviceProvider.GetRequiredService<VectorStore>().GetDynamicCollection("native-aot", definition);
+    Check("the vector store of dependency injection reads the records", await registered.GetAsync("a") is { } fromServices && fromServices["Key"] is "a");
 }
 finally
 {
