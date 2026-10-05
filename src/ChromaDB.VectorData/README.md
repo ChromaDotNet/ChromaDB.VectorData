@@ -1,8 +1,12 @@
+[![ChromaDotNet](https://raw.githubusercontent.com/ChromaDotNet/.github/main/assets/logo-64.png)](https://chromadotnet.org)
+
 # ChromaDotNet.VectorData
 
 [Chroma](https://www.trychroma.com/) provider for [Microsoft.Extensions.VectorData](https://learn.microsoft.com/dotnet/ai/vector-stores/overview), built on [ChromaDotNet.Client](https://github.com/ChromaDotNet/ChromaDB.Client).
 
 > This is a community project. It is not affiliated with or endorsed by Chroma.
+
+Website: [chromadotnet.org](https://chromadotnet.org)
 
 ## Quick start
 

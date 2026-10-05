@@ -1,3 +1,5 @@
+[![ChromaDotNet](https://raw.githubusercontent.com/ChromaDotNet/.github/main/assets/logo-64.png)](https://chromadotnet.org)
+
 # ChromaDB.VectorData
 
 A [Chroma](https://www.trychroma.com/) provider for [Microsoft.Extensions.VectorData](https://learn.microsoft.com/dotnet/ai/vector-stores/overview), built on [ChromaDB.Client](https://github.com/ChromaDotNet/ChromaDB.Client), and published as the `ChromaDotNet.VectorData` package.
@@ -5,6 +7,8 @@ A [Chroma](https://www.trychroma.com/) provider for [Microsoft.Extensions.Vector
 > This is a community project. It is not affiliated with or endorsed by Chroma.
 
 See the [package README](src/ChromaDB.VectorData/README.md) for how to use it, what is supported and the limitations.
+
+Website: [chromadotnet.org](https://chromadotnet.org)
 
 ## Building and testing
 
