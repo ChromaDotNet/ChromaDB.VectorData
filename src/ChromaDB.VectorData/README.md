@@ -9,7 +9,7 @@
 1. Run Chroma with Docker:
 
 ```bash
-docker run -d --name chroma -p 8000:8000 chromadb/chroma
+docker run -d --name chroma -p 8000:8000 chromadb/chroma:1.5.9
 ```
 
 2. Install the NuGet package:
@@ -26,7 +26,8 @@ using ChromaDB.VectorData;
 using Microsoft.Extensions.VectorData;
 
 using var httpClient = new HttpClient();
-using var vectorStore = new ChromaVectorStore(new ChromaClient(new ChromaConfigurationOptions("http://localhost:8000"), httpClient));
+var client = new ChromaClient(new ChromaConfigurationOptions("http://localhost:8000"), httpClient);
+using var vectorStore = new ChromaVectorStore(client);
 
 var collection = vectorStore.GetCollection<string, Hotel>("hotels");
 await collection.EnsureCollectionExistsAsync();
@@ -43,7 +44,7 @@ public sealed class Hotel
     [VectorStoreKey]
     public string Id { get; set; } = "";
 
-    [VectorStoreData]
+    [VectorStoreData(IsFullTextIndexed = true)]
     public string? Name { get; set; }
 
     [VectorStoreData]
@@ -76,13 +77,13 @@ Connect with the options of the client: the API key goes in the `X-Chroma-Token`
 
 ## Hybrid search
 
-On Chroma Cloud, `HybridSearchAsync` searches with a vector and keywords together: it fuses the ranks of the vector search and of a BM25 search of the keywords in a full-text indexed `string` property. The BM25 search needs a BM25 index, a sparse vector index of Chroma, on the text of the property. With `CreateBm25Indexes`, creating the collection creates one for each full-text indexed `string` property, and the client computes the BM25 vectors of the records as it writes them:
+On Chroma Cloud, `HybridSearchAsync` searches with a vector and keywords together: it fuses the ranks of the vector search and of a BM25 search of the keywords in a full-text indexed `string` property. The BM25 search needs a BM25 index, a sparse vector index of Chroma, on the text of the property. With `CreateBm25Indexes`, creating the collection creates one for each full-text indexed `string` property, like `Name` of `Hotel` above, and the client computes the BM25 vectors of the records as it writes them:
 
 ```csharp
-var collection = new ChromaCollection<string, Hotel>(client, "hotels", new() { CreateBm25Indexes = true });
+var collection = new ChromaCollection<string, Hotel>(client, "hotels-hybrid", new() { CreateBm25Indexes = true });
 await collection.EnsureCollectionExistsAsync();
 
-var results = collection.HybridSearchAsync(embedding, ["pool", "spa"], top: 5);
+var results = collection.HybridSearchAsync(new float[] { 0.1f, 0.2f, 0.3f, 0.4f }, ["pool", "spa"], top: 5);
 ```
 
 `ChromaVectorStoreOptions` has the same option for the collections of a vector store. Only with the option a collection answers `IKeywordHybridSearchable` from `GetService`, which the `TextSearchStore` of Semantic Kernel asks for to choose hybrid search over vector search. A collection created by another client of Chroma, like the Python one, works too when it has a `chroma_bm25` index on the text of the property, or on the documents for the property stored as the document. A record without any of the keywords gets nothing from the BM25 search, as in a keyword search. A single Chroma server has neither the Search API nor sparse vector indexes.
