@@ -176,7 +176,7 @@ public static class ChromaServiceCollectionExtensions
     /// <param name="name">The name of the collection.</param>
     /// <param name="clientProvider">The <see cref="ChromaClient"/> provider.</param>
     /// <param name="optionsProvider">Options provider to further configure the <see cref="ChromaCollection{TKey, TRecord}"/>.</param>
-    /// <param name="lifetime">The service lifetime for the store. Defaults to <see cref="ServiceLifetime.Singleton"/>.</param>
+    /// <param name="lifetime">The service lifetime for the collection. Defaults to <see cref="ServiceLifetime.Singleton"/>.</param>
     /// <returns>Service collection.</returns>
     [RequiresUnreferencedCode(UnreferencedCodeMessage)]
     [RequiresDynamicCode(DynamicCodeMessage)]
@@ -228,7 +228,7 @@ public static class ChromaServiceCollectionExtensions
     /// <param name="name">The name of the collection.</param>
     /// <param name="uri">The URI of the Chroma server, like <c>http://localhost:8000</c>.</param>
     /// <param name="options">Options to further configure the <see cref="ChromaCollection{TKey, TRecord}"/>.</param>
-    /// <param name="lifetime">The service lifetime for the store. Defaults to <see cref="ServiceLifetime.Singleton"/>.</param>
+    /// <param name="lifetime">The service lifetime for the collection. Defaults to <see cref="ServiceLifetime.Singleton"/>.</param>
     /// <returns>Service collection.</returns>
     [RequiresUnreferencedCode(UnreferencedCodeMessage)]
     [RequiresDynamicCode(DynamicCodeMessage)]
@@ -273,7 +273,7 @@ public static class ChromaServiceCollectionExtensions
     /// <param name="name">The name of the collection.</param>
     /// <param name="chromaOptions">The options used to connect to Chroma.</param>
     /// <param name="options">Options to further configure the <see cref="ChromaCollection{TKey, TRecord}"/>.</param>
-    /// <param name="lifetime">The service lifetime for the store. Defaults to <see cref="ServiceLifetime.Singleton"/>.</param>
+    /// <param name="lifetime">The service lifetime for the collection. Defaults to <see cref="ServiceLifetime.Singleton"/>.</param>
     /// <returns>Service collection.</returns>
     [RequiresUnreferencedCode(UnreferencedCodeMessage)]
     [RequiresDynamicCode(DynamicCodeMessage)]

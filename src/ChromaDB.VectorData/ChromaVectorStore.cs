@@ -38,7 +38,7 @@ public sealed class ChromaVectorStore : VectorStore
     /// </summary>
     /// <param name="chromaOptions">The options used to connect to Chroma.</param>
     /// <param name="httpClient">The <see cref="HttpClient"/> used to send the requests to Chroma.</param>
-    /// <param name="ownsClient">A value indicating whether <paramref name="httpClient"/> is disposed after the vector store is disposed.</param>
+    /// <param name="ownsClient">A value indicating whether <paramref name="httpClient"/> is disposed once the vector store and the collections it returns are all disposed.</param>
     /// <param name="options">Optional configuration options for this class.</param>
     public ChromaVectorStore(ChromaConfigurationOptions chromaOptions, HttpClient httpClient, bool ownsClient, ChromaVectorStoreOptions? options = default)
         : this(new SharedChromaClient(chromaOptions, httpClient, ownsClient), options)

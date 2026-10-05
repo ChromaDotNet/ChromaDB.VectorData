@@ -591,9 +591,6 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
             | (_mapper.HasDocument ? ChromaGetInclude.Documents : 0);
 
     /// <summary>
-    /// Get the Chroma collection, reading it the first time; record operations need its id.
-    /// </summary>
-    /// <summary>
     /// Run an operation on the Chroma collection. Its id is kept after the first lookup, and a collection deleted and created
     /// again elsewhere has a new id: when Chroma no longer finds the kept id, the collection is looked up again by name, once.
     /// </summary>
@@ -621,6 +618,9 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
     private static bool IsCollectionNotFound(ChromaException exception)
         => exception.ErrorType == "NotFoundError" || exception.StatusCode == System.Net.HttpStatusCode.NotFound;
 
+    /// <summary>
+    /// Get the Chroma collection, reading it the first time; record operations need its id.
+    /// </summary>
     private async Task<ChromaCollection> GetChromaCollectionAsync(CancellationToken cancellationToken)
         => _chromaCollection ??= VerifySpace(await _chromaClient.Client.GetCollectionAsync(Name, cancellationToken: cancellationToken).ConfigureAwait(false));
 
