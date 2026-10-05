@@ -19,7 +19,7 @@ The conformance tests start Chroma in a container with [Testcontainers](https://
 `CHROMA_IMAGE` picks another Chroma release, like `chromadb/chroma:1.5.0`. To run them against a server already running, like Chroma Cloud, set the same variables as the tests of ChromaDotNet.Client; the tests delete only the collections they create:
 
 ```bash
-CHROMA_TEST_URI=https://api.trychroma.com CHROMA_TEST_TOKEN=<api key> CHROMA_TEST_TENANT=<tenant> CHROMA_TEST_DATABASE=<database> CHROMA_TEST_MAX_BATCH_SIZE=300 dotnet test test/ChromaDB.VectorData.ConformanceTests
+CHROMA_TEST_URI=https://api.trychroma.com CHROMA_TEST_TOKEN=<api key> CHROMA_TEST_TENANT=<tenant> CHROMA_TEST_DATABASE=<database> dotnet test test/ChromaDB.VectorData.ConformanceTests
 ```
 
 ## Origin

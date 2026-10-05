@@ -65,13 +65,6 @@ internal class MockableChromaClient : IDisposable
     /// </summary>
     public string? DatabaseName => _chromaClient?.Options.Database;
 
-    /// <summary>
-    /// Gets the number of records to read per request, the batch size of the writes when the caller sets one with
-    /// <c>WithBatchSplitting(maxBatchSize)</c>, or <see langword="null"/> to read in one request. Chroma Cloud reads and
-    /// writes at most 300 records per request.
-    /// </summary>
-    public int? ReadPageSize => _chromaClient?.Options is { BatchSplitting: true, MaxBatchSize: { } size } ? size : null;
-
     public void Dispose()
     {
         if (_ownedHttpClient is not null && Interlocked.Decrement(ref _referenceCount) == 0)
@@ -86,7 +79,7 @@ internal class MockableChromaClient : IDisposable
     /// <param name="collectionName">The name of the collection.</param>
     /// <param name="cancellationToken">The token to monitor for cancellation requests.</param>
     public virtual Task<bool> CollectionExistsAsync(string collectionName, CancellationToken cancellationToken = default)
-        => _chromaClient.CollectionExists(collectionName, cancellationToken: cancellationToken);
+        => _chromaClient.CollectionExistsAsync(collectionName, cancellationToken: cancellationToken);
 
     /// <summary>
     /// Get a collection, creating it from the given definition if it does not exist.
@@ -94,7 +87,7 @@ internal class MockableChromaClient : IDisposable
     /// <param name="definition">The name and configuration of the collection; the configuration is used only when the collection is created.</param>
     /// <param name="cancellationToken">The token to monitor for cancellation requests.</param>
     public virtual Task<ChromaCollection> GetOrCreateCollectionAsync(ChromaCollectionDefinition definition, CancellationToken cancellationToken = default)
-        => _chromaClient.GetOrCreateCollection(definition, cancellationToken: cancellationToken);
+        => _chromaClient.GetOrCreateCollectionAsync(definition, cancellationToken: cancellationToken);
 
     /// <summary>
     /// Get a collection.
@@ -102,7 +95,7 @@ internal class MockableChromaClient : IDisposable
     /// <param name="collectionName">The name of the collection.</param>
     /// <param name="cancellationToken">The token to monitor for cancellation requests.</param>
     public virtual Task<ChromaCollection> GetCollectionAsync(string collectionName, CancellationToken cancellationToken = default)
-        => _chromaClient.GetCollection(collectionName, cancellationToken: cancellationToken);
+        => _chromaClient.GetCollectionAsync(collectionName, cancellationToken: cancellationToken);
 
     /// <summary>
     /// Delete a collection.
@@ -110,7 +103,7 @@ internal class MockableChromaClient : IDisposable
     /// <param name="collectionName">The name of the collection.</param>
     /// <param name="cancellationToken">The token to monitor for cancellation requests.</param>
     public virtual Task DeleteCollectionAsync(string collectionName, CancellationToken cancellationToken = default)
-        => _chromaClient.DeleteCollection(collectionName, cancellationToken: cancellationToken);
+        => _chromaClient.DeleteCollectionAsync(collectionName, cancellationToken: cancellationToken);
 
     /// <summary>
     /// List the names of the collections.
@@ -118,7 +111,7 @@ internal class MockableChromaClient : IDisposable
     /// <param name="cancellationToken">The token to monitor for cancellation requests.</param>
     public virtual async Task<IReadOnlyList<string>> ListCollectionsAsync(CancellationToken cancellationToken = default)
     {
-        var collections = await _chromaClient.ListCollections(cancellationToken: cancellationToken).ConfigureAwait(false);
+        var collections = await _chromaClient.ListCollectionsAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
         return collections.Select(collection => collection.Name).ToList();
     }
 
@@ -133,7 +126,7 @@ internal class MockableChromaClient : IDisposable
     /// <param name="offset">The number of records to skip.</param>
     /// <param name="include">The fields to return.</param>
     /// <param name="cancellationToken">The token to monitor for cancellation requests.</param>
-    public virtual Task<List<ChromaCollectionEntry>> GetAsync(
+    public virtual Task<IReadOnlyList<ChromaCollectionEntry>> GetAsync(
         ChromaCollection collection,
         List<string>? ids,
         ChromaWhereOperator? where,
@@ -142,7 +135,7 @@ internal class MockableChromaClient : IDisposable
         int? offset,
         ChromaGetInclude include,
         CancellationToken cancellationToken = default)
-        => GetCollectionClient(collection).Get(ids, where, whereDocument, limit, offset, include, cancellationToken);
+        => GetCollectionClient(collection).GetAsync(ids, where, whereDocument, limit, offset, include, cancellationToken);
 
     /// <summary>
     /// Find the records nearest to a vector.
@@ -155,7 +148,7 @@ internal class MockableChromaClient : IDisposable
     /// <param name="ids">The ids the records must have, or <see langword="null"/> for any id.</param>
     /// <param name="include">The fields to return.</param>
     /// <param name="cancellationToken">The token to monitor for cancellation requests.</param>
-    public virtual async Task<List<ChromaCollectionQueryEntry>> QueryAsync(
+    public virtual async Task<IReadOnlyList<ChromaCollectionQueryEntry>> QueryAsync(
         ChromaCollection collection,
         ReadOnlyMemory<float> queryEmbedding,
         int nResults,
@@ -165,7 +158,7 @@ internal class MockableChromaClient : IDisposable
         ChromaQueryInclude include,
         CancellationToken cancellationToken = default)
     {
-        var results = await GetCollectionClient(collection).Query(
+        var results = await GetCollectionClient(collection).QueryAsync(
             new ChromaQuery([queryEmbedding]) { NResults = nResults, Where = where, WhereDocument = whereDocument, Ids = ids, Include = include },
             cancellationToken).ConfigureAwait(false);
 
@@ -178,8 +171,8 @@ internal class MockableChromaClient : IDisposable
     /// <param name="collection">The collection, with its schema: the client computes the vectors of text queries with its sparse vector indexes.</param>
     /// <param name="search">The search.</param>
     /// <param name="cancellationToken">The token to monitor for cancellation requests.</param>
-    public virtual Task<List<ChromaSearchEntry>> SearchAsync(ChromaCollection collection, ChromaSearch search, CancellationToken cancellationToken = default)
-        => GetCollectionClient(collection).Search(search, cancellationToken: cancellationToken);
+    public virtual Task<IReadOnlyList<ChromaSearchEntry>> SearchAsync(ChromaCollection collection, ChromaSearch search, CancellationToken cancellationToken = default)
+        => GetCollectionClient(collection).SearchAsync(search, cancellationToken: cancellationToken);
 
     /// <summary>
     /// Insert or update records.
@@ -197,7 +190,7 @@ internal class MockableChromaClient : IDisposable
         List<Dictionary<string, object>>? metadatas,
         List<string>? documents,
         CancellationToken cancellationToken = default)
-        => GetCollectionClient(collection).Upsert(ids, embeddings, metadatas, documents, cancellationToken);
+        => GetCollectionClient(collection).UpsertAsync(ids, embeddings, metadatas, documents, cancellationToken);
 
     /// <summary>
     /// Delete records by their ids.
@@ -206,7 +199,7 @@ internal class MockableChromaClient : IDisposable
     /// <param name="ids">The ids of the records.</param>
     /// <param name="cancellationToken">The token to monitor for cancellation requests.</param>
     public virtual Task DeleteAsync(ChromaCollection collection, List<string> ids, CancellationToken cancellationToken = default)
-        => GetCollectionClient(collection).Delete(ids, cancellationToken: cancellationToken);
+        => GetCollectionClient(collection).DeleteAsync(ids, cancellationToken: cancellationToken);
 
     internal MockableChromaClient Share()
     {

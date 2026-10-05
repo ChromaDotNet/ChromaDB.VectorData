@@ -67,7 +67,7 @@ internal sealed class ChromaMapper<TRecord>(CollectionModel model)
             };
     }
 
-    public TRecord MapFromStorageToDataModel(string id, ReadOnlyMemory<float>? embedding, Dictionary<string, object>? metadata, string? document, bool includeVectors)
+    public TRecord MapFromStorageToDataModel(string id, ReadOnlyMemory<float>? embedding, IReadOnlyDictionary<string, object>? metadata, string? document, bool includeVectors)
     {
         var outputRecord = model.CreateRecord<TRecord>()!;
 

@@ -66,14 +66,13 @@ Or it creates its own client, from a URI or from the options of the client, like
 ```csharp
 services.AddChromaVectorStore("http://localhost:8000");
 
-services.AddChromaVectorStore(new ChromaConfigurationOptions("https://api.trychroma.com", defaultTenant: "<tenant>", defaultDatabase: "<database>")
-    .WithChromaToken("<api key>")
-    .WithBatchSplitting(maxBatchSize: 300));
+services.AddChromaVectorStore(new ChromaConfigurationOptions("https://api.trychroma.com", tenant: "<tenant>", database: "<database>")
+    .WithChromaToken("<api key>"));
 ```
 
 ## Chroma Cloud
 
-Connect with the options of the client: the API key goes in the `X-Chroma-Token` header, with the tenant and the database of the Chroma Cloud dashboard. Chroma Cloud reads and writes at most 300 records per request: with `WithBatchSplitting(maxBatchSize: 300)`, the client writes in batches of 300 and the provider reads in pages of 300. A search returns at most 300 results, `top` plus `Skip` included.
+Connect with the options of the client: the API key goes in the `X-Chroma-Token` header, with the tenant and the database of the Chroma Cloud dashboard. Chroma Cloud reads and writes at most 300 records per request: on its addresses the client writes and reads in batches of 300 by itself. A search returns at most 300 results, `top` plus `Skip` included.
 
 ## Hybrid search
 

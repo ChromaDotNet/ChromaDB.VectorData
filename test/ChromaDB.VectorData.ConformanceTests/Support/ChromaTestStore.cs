@@ -15,7 +15,8 @@ internal sealed class ChromaTestStore : TestStore
 {
     // CHROMA_TEST_URI runs the tests against a server already running, like Chroma Cloud, with the same variables
     // as the tests of ChromaDotNet.Client: CHROMA_TEST_TOKEN goes in X-Chroma-Token, CHROMA_TEST_TENANT and
-    // CHROMA_TEST_DATABASE are used as they are, CHROMA_TEST_MAX_BATCH_SIZE splits the writes.
+    // CHROMA_TEST_DATABASE are used as they are, CHROMA_TEST_MAX_BATCH_SIZE sets the size of the batches, which the client
+    // chooses by itself on Chroma Cloud.
     // Declared before Instance, which reads it when it is created.
     private static readonly string? s_testUri = Variable("CHROMA_TEST_URI");
 
@@ -120,7 +121,7 @@ internal sealed class ChromaTestStore : TestStore
 
         if (this._container is null)
         {
-            var collections = await new ChromaClient(this.ChromaOptions, this._httpClient).ListCollections();
+            var collections = await new ChromaClient(this.ChromaOptions, this._httpClient).ListCollectionsAsync();
             this._collectionsBefore = collections.Select(collection => collection.Name).ToHashSet();
         }
     }
@@ -130,11 +131,11 @@ internal sealed class ChromaTestStore : TestStore
         if (this._collectionsBefore is not null)
         {
             var client = new ChromaClient(this.ChromaOptions, this.HttpClient);
-            foreach (var collection in await client.ListCollections())
+            foreach (var collection in await client.ListCollectionsAsync())
             {
                 if (!this._collectionsBefore.Contains(collection.Name))
                 {
-                    await client.DeleteCollection(collection.Name);
+                    await client.DeleteCollectionAsync(collection.Name);
                 }
             }
         }

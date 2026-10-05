@@ -131,8 +131,8 @@ public class ChromaCollectionTests
             .Callback<ChromaCollection, ChromaSearch, CancellationToken>((_, s, _) => search = s)
             .ReturnsAsync(
             [
-                new ChromaSearchEntry("h1") { Score = -0.032f, Document = "A pool and a spa", Metadata = new() { ["Description"] = "A pool and a spa", ["Rating"] = 5L } },
-                new ChromaSearchEntry("h2") { Score = -0.016f, Document = "A gym", Metadata = new() { ["Description"] = "A gym", ["Rating"] = 4L } },
+                new ChromaSearchEntry("h1") { Score = -0.032f, Document = "A pool and a spa", Metadata = new Dictionary<string, object> { ["Description"] = "A pool and a spa", ["Rating"] = 5L } },
+                new ChromaSearchEntry("h2") { Score = -0.016f, Document = "A gym", Metadata = new Dictionary<string, object> { ["Description"] = "A gym", ["Rating"] = 4L } },
             ]);
 
         // Act.
@@ -266,7 +266,7 @@ public class ChromaCollectionTests
         using var sut = this.CreateCollection<string, Hotel<string>>();
         this._chromaClientMock
             .Setup(x => x.GetAsync(this._chromaCollection, new List<string> { "h1" }, null, null, null, null, ChromaGetInclude.Metadatas, this._testCancellationToken))
-            .ReturnsAsync([new ChromaCollectionEntry("h1") { Metadata = new() { ["HotelName"] = "Grand" } }]);
+            .ReturnsAsync([new ChromaCollectionEntry("h1") { Metadata = new Dictionary<string, object> { ["HotelName"] = "Grand" } }]);
 
         // Act.
         var hotel = await sut.GetAsync("h1", cancellationToken: this._testCancellationToken);
@@ -396,7 +396,7 @@ public class ChromaCollectionTests
         using var sut = this.CreateCollection<string, Hotel<string>>();
         this._chromaClientMock
             .Setup(x => x.GetOrCreateCollectionAsync(It.IsAny<ChromaCollectionDefinition>(), this._testCancellationToken))
-            .ReturnsAsync(new ChromaCollection(TestCollectionName) { Id = Guid.NewGuid(), Metadata = new() { ["hnsw:space"] = "l2" } });
+            .ReturnsAsync(new ChromaCollection(TestCollectionName) { Id = Guid.NewGuid(), Metadata = new Dictionary<string, object> { ["hnsw:space"] = "l2" } });
 
         // Act and assert.
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => sut.EnsureCollectionExistsAsync(this._testCancellationToken));
@@ -411,7 +411,7 @@ public class ChromaCollectionTests
         using var sut = new ChromaCollection<string, DotProductHotel>(() => this._chromaClientMock.Object, "othercollection", null);
         this._chromaClientMock
             .Setup(x => x.GetCollectionAsync("othercollection", this._testCancellationToken))
-            .ReturnsAsync(new ChromaCollection("othercollection") { Id = Guid.NewGuid(), Metadata = new() { ["hnsw:space"] = "cosine" } });
+            .ReturnsAsync(new ChromaCollection("othercollection") { Id = Guid.NewGuid(), Metadata = new Dictionary<string, object> { ["hnsw:space"] = "cosine" } });
 
         // Act and assert.
         await Assert.ThrowsAsync<InvalidOperationException>(async () => await sut.SearchAsync(new ReadOnlyMemory<float>([1, 2, 3, 4]), top: 1, cancellationToken: this._testCancellationToken).ToListAsync());
@@ -424,7 +424,7 @@ public class ChromaCollectionTests
         using var sut = this.CreateCollection<string, DotProductHotel>();
         this._chromaClientMock
             .Setup(x => x.GetOrCreateCollectionAsync(It.IsAny<ChromaCollectionDefinition>(), this._testCancellationToken))
-            .ReturnsAsync(new ChromaCollection(TestCollectionName) { Id = Guid.NewGuid(), Metadata = new() { ["hnsw:space"] = "ip" } });
+            .ReturnsAsync(new ChromaCollection(TestCollectionName) { Id = Guid.NewGuid(), Metadata = new Dictionary<string, object> { ["hnsw:space"] = "ip" } });
 
         // Act.
         await sut.EnsureCollectionExistsAsync(this._testCancellationToken);

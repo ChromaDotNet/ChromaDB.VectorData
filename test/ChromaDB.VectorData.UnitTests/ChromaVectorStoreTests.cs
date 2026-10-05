@@ -28,9 +28,9 @@ public class ChromaVectorStoreTests
     [Fact]
     public void ReadsMetadataExactlyWithTheClientOfTheCaller()
     {
-        // Arrange.
+        // Arrange: a caller that reads metadata with inferred types.
         using var httpClient = new HttpClient();
-        var chromaClient = new ChromaClient(new ChromaConfigurationOptions("http://localhost:8000"), httpClient);
+        var chromaClient = new ChromaClient(new ChromaConfigurationOptions("http://localhost:8000").WithMetadataValues(ChromaMetadataValues.Inferred), httpClient);
 
         // Act.
         using var sut = new ChromaVectorStore(chromaClient);
@@ -48,7 +48,7 @@ public class ChromaVectorStoreTests
     {
         // Arrange.
         using var httpClient = new HttpClient();
-        var chromaClient = new ChromaClient(new ChromaConfigurationOptions("http://localhost:8000", defaultDatabase: database), httpClient);
+        var chromaClient = new ChromaClient(new ChromaConfigurationOptions("http://localhost:8000", database: database), httpClient);
 
         // Act.
         using var sut = new ChromaVectorStore(chromaClient);

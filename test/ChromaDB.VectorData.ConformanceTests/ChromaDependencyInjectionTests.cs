@@ -87,7 +87,7 @@ public class ChromaDependencyInjectionTests
     public void ChromaOptionsReachTheClient()
     {
         IServiceCollection services = new ServiceCollection();
-        var chromaOptions = new ChromaConfigurationOptions(Uri, defaultTenant: "tenant1", defaultDatabase: "database1");
+        var chromaOptions = new ChromaConfigurationOptions(Uri, tenant: "tenant1", database: "database1");
         services.AddChromaVectorStore(chromaOptions);
         services.AddChromaCollection<string, Record>("collection1", chromaOptions);
 

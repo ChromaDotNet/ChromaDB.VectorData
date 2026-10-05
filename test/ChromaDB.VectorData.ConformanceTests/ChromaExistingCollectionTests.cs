@@ -22,19 +22,19 @@ public sealed class ChromaExistingCollectionTests : IAsyncLifetime
         await ChromaTestStore.Instance.ReferenceCountingStartAsync();
 
         this._client = new ChromaClient(ChromaTestStore.Instance.ChromaOptions, ChromaTestStore.Instance.HttpClient);
-        if (await this._client.CollectionExists(CollectionName))
+        if (await this._client.CollectionExistsAsync(CollectionName))
         {
-            await this._client.DeleteCollection(CollectionName);
+            await this._client.DeleteCollectionAsync(CollectionName);
         }
 
         // Created without a space, as Chroma clients without a distance setting do.
-        var collection = await this._client.CreateCollection(CollectionName);
-        await this._client.GetCollectionClient(collection).Add(["a"], [new float[] { 3, 4 }]);
+        var collection = await this._client.CreateCollectionAsync(CollectionName);
+        await this._client.GetCollectionClient(collection).AddAsync(["a"], [new float[] { 3, 4 }]);
     }
 
     public async ValueTask DisposeAsync()
     {
-        await this._client.DeleteCollection(CollectionName);
+        await this._client.DeleteCollectionAsync(CollectionName);
         await ChromaTestStore.Instance.ReferenceCountingStopAsync();
     }
 

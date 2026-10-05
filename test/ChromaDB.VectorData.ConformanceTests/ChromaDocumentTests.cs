@@ -45,8 +45,8 @@ public sealed class ChromaDocumentTests : IAsyncLifetime
     [Fact]
     public async Task The_full_text_property_is_stored_as_the_document()
     {
-        var collection = await this._client.GetCollection(CollectionName);
-        var entry = await this._client.GetCollectionClient(collection).Get("a", include: ChromaGetInclude.Documents);
+        var collection = await this._client.GetCollectionAsync(CollectionName);
+        var entry = await this._client.GetCollectionClient(collection).GetAsync("a", include: ChromaGetInclude.Documents);
 
         Assert.Equal("A hotel with a pool and a spa", entry?.Document);
     }
@@ -70,8 +70,8 @@ public sealed class ChromaDocumentTests : IAsyncLifetime
     [Fact]
     public async Task A_record_written_by_another_client_reads_its_text_from_the_document()
     {
-        var collection = await this._client.GetCollection(CollectionName);
-        await this._client.GetCollectionClient(collection).Upsert(["d"], [new float[] { 1, 1, 0 }], documents: ["Written by another Chroma client"]);
+        var collection = await this._client.GetCollectionAsync(CollectionName);
+        await this._client.GetCollectionClient(collection).UpsertAsync(["d"], [new float[] { 1, 1, 0 }], documents: ["Written by another Chroma client"]);
 
         var record = await this._collection.GetAsync("d");
 
