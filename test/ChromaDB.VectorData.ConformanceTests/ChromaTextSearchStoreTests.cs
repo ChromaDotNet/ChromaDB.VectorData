@@ -66,6 +66,37 @@ public sealed class ChromaTextSearchStoreTests : IAsyncLifetime
         Assert.DoesNotContain(results, result => result.Name == "other.md");
     }
 
+    [Fact]
+    public async Task TextSearchStore_finds_no_document_that_left_the_namespace()
+    {
+        // The document is replaced by its source id: without the namespace, a search in the namespace no longer finds it.
+        using var textSearchStore = new TextSearchStore<string>(this._store, CollectionName, Dimensions, new TextSearchStoreOptions { SearchNamespace = "docs", UseSourceIdAsPrimaryKey = true });
+        await textSearchStore.UpsertDocumentsAsync([new TextSearchDocument { Namespaces = ["docs"], SourceId = "a", SourceName = "chroma.md", Text = "Chroma is a vector database for embeddings" }]);
+        Assert.NotEmpty(await SearchUntilAsync(textSearchStore, results => results.Count > 0));
+
+        await textSearchStore.UpsertDocumentsAsync([new TextSearchDocument { Namespaces = [], SourceId = "a", SourceName = "chroma.md", Text = "Chroma is a vector database for embeddings" }]);
+        Assert.Empty(await SearchUntilAsync(textSearchStore, results => results.Count == 0));
+    }
+
+    // Chroma Cloud indexes asynchronously: search until the condition holds, or the attempts end.
+    private static async Task<List<TextSearchResult>> SearchUntilAsync(TextSearchStore<string> textSearchStore, Func<List<TextSearchResult>, bool> condition)
+    {
+        List<TextSearchResult> results = [];
+        for (var attempt = 0; attempt < 50; attempt++)
+        {
+            var search = await textSearchStore.GetTextSearchResultsAsync("vector database embeddings");
+            results = await search.Results.ToListAsync();
+            if (condition(results))
+            {
+                break;
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(200));
+        }
+
+        return results;
+    }
+
     /// <summary>
     /// Deterministic embeddings: the words hashed into a fixed number of dimensions, so texts that share words are close.
     /// </summary>
