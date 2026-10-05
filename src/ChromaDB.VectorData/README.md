@@ -98,12 +98,13 @@ var results = collection.HybridSearchAsync(new float[] { 0.1f, 0.2f, 0.3f, 0.4f 
 
 - Keys: `string` and `Guid`.
 - One vector per record: `ReadOnlyMemory<float>`, `Embedding<float>` or `float[]`, or any type with an embedding generator.
-- Data properties: `string`, `int`, `long`, `double`, `float`, `bool`, `DateTime`, `DateTimeOffset`, `DateOnly`, and arrays or lists of these, stored as Chroma metadata; dates are stored as ISO 8601 strings.
+- Data properties: `string`, `int`, `long`, `double`, `float`, `bool`, `DateTime`, `DateTimeOffset`, `DateOnly` (.NET 8 and later), their nullable forms, and arrays or `List<T>` of these, stored as Chroma metadata; dates are stored as ISO 8601 strings.
+- Targets .NET 10, .NET 8, .NET Standard 2.0 and .NET Framework 4.6.2; NativeAOT needs .NET 8 or later.
 - Distance functions: `CosineSimilarity` (the default), `CosineDistance`, `DotProductSimilarity`, `NegativeDotProductSimilarity`, `EuclideanDistance` and `EuclideanSquaredDistance`, with the HNSW index.
 - An existing collection must use the space of the distance function, as a collection created by another Chroma client without a space uses l2: otherwise the provider throws, rather than turning the distances of another space into scores.
 - Filters: `==` and `!=`, `<`, `<=`, `>` and `>=` on numbers, `&&`, `||`, `!`, `Contains` over an inline list or an array property, and `Any` with `Contains` over an inline list.
 - Filters on the key: `==` and `Contains` over a list of keys, joined to the other conditions with `&&`; Chroma looks the records up by id.
-- Full-text: the only full-text indexed `string` property is also stored as the Chroma document, where other Chroma clients store their text. `Contains` on it filters the text with `where_document`, joined to the other conditions with `&&`, and a record that has its text in the document only reads it into that property.
+- Full-text: the only full-text indexed `string` property is also stored as the Chroma document, where other Chroma clients store their text. `Contains` and `!Contains` on it filter the text with `where_document`, joined to the other conditions with `&&`, and a record that has its text in the document only reads it into that property.
 - NativeAOT and trimming: the dynamic collection, from `GetDynamicCollection` with a `VectorStoreCollectionDefinition`, works without reflection; `ChromaCollection<TKey, TRecord>` maps the properties of the record type by reflection. The `AddChroma…` registration methods are marked as incompatible with trimming and NativeAOT: there, register the vector store yourself, like `services.AddSingleton<VectorStore>(sp => new ChromaVectorStore(sp.GetRequiredService<ChromaClient>()));`.
 
 ## Limitations
