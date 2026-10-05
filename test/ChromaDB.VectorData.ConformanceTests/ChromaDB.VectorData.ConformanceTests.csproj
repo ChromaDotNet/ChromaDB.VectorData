@@ -7,11 +7,14 @@
     <IsTestProject>true</IsTestProject>
     <IsPackable>false</IsPackable>
     <RootNamespace>ChromaDB.VectorData.ConformanceTests</RootNamespace>
+    <!-- The TextSearchStore of Semantic Kernel is experimental. -->
+    <NoWarn>$(NoWarn);SKEXP0001;SKEXP0130</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="ChromaDotNet.Testcontainers" />
     <PackageReference Include="ChromaDotNet.Client.DependencyInjection" />
+    <PackageReference Include="Microsoft.SemanticKernel.Core" />
   </ItemGroup>
   
   <ItemGroup>
