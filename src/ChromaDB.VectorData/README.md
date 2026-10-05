@@ -58,6 +58,10 @@ public sealed class Hotel
 With dependency injection, the vector store takes the `ChromaClient` of the container, like the singleton that [ChromaDotNet.Client.DependencyInjection](https://www.nuget.org/packages/ChromaDotNet.Client.DependencyInjection) registers with an `HttpClient` from `IHttpClientFactory`:
 
 ```csharp
+// dotnet add package ChromaDotNet.Client.DependencyInjection
+using ChromaDB.Client;
+using ChromaDB.Client.DependencyInjection;
+
 services.AddChromaClient(_ => new ChromaConfigurationOptions("http://localhost:8000"));
 services.AddChromaVectorStore();
 ```
@@ -70,6 +74,8 @@ services.AddChromaVectorStore("http://localhost:8000");
 services.AddChromaVectorStore(new ChromaConfigurationOptions("https://api.trychroma.com", tenant: "<tenant>", database: "<database>")
     .WithChromaToken("<api key>"));
 ```
+
+`AddChromaCollection<TKey, TRecord>(name, …)` registers one collection in the same three ways, and `AddKeyedChromaVectorStore` and `AddKeyedChromaCollection` register them under a key. With these registrations, the embedding generator is the `EmbeddingGenerator` of `ChromaVectorStoreOptions` or `ChromaCollectionOptions`, or else an `IEmbeddingGenerator` registered in the container. Without dependency injection, `ChromaVectorStore` and `ChromaCollection` also take the options of the client with an `HttpClient`, which they dispose with `ownsClient: true`. `GetService(typeof(ChromaClient))` on the vector store or a collection returns the client it uses.
 
 ## Chroma Cloud
 
@@ -98,7 +104,7 @@ var results = collection.HybridSearchAsync(new float[] { 0.1f, 0.2f, 0.3f, 0.4f 
 - Filters: `==` and `!=`, `<`, `<=`, `>` and `>=` on numbers, `&&`, `||`, `!`, `Contains` over an inline list or an array property, and `Any` with `Contains` over an inline list.
 - Filters on the key: `==` and `Contains` over a list of keys, joined to the other conditions with `&&`; Chroma looks the records up by id.
 - Full-text: the only full-text indexed `string` property is also stored as the Chroma document, where other Chroma clients store their text. `Contains` on it filters the text with `where_document`, joined to the other conditions with `&&`, and a record that has its text in the document only reads it into that property.
-- NativeAOT and trimming: the dynamic collection, from `GetDynamicCollection` with a `VectorStoreCollectionDefinition`, works without reflection; `ChromaCollection<TKey, TRecord>` maps the properties of the record type by reflection.
+- NativeAOT and trimming: the dynamic collection, from `GetDynamicCollection` with a `VectorStoreCollectionDefinition`, works without reflection; `ChromaCollection<TKey, TRecord>` maps the properties of the record type by reflection. The `AddChroma…` registration methods are marked as incompatible with trimming and NativeAOT: there, register the vector store yourself, like `services.AddSingleton<VectorStore>(sp => new ChromaVectorStore(sp.GetRequiredService<ChromaClient>()));`.
 
 ## Limitations
 
