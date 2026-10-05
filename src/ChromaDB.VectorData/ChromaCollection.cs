@@ -567,6 +567,11 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// The collection answers <see cref="IKeywordHybridSearchable{TRecord}"/> only with
+    /// <see cref="ChromaCollectionOptions.CreateBm25Indexes"/> and a full-text indexed <see langword="string"/> property, where hybrid
+    /// search can work: callers like the <c>TextSearchStore</c> of Semantic Kernel ask for it to choose hybrid search over vector search.
+    /// </remarks>
     public override object? GetService(Type serviceType, object? serviceKey = null)
     {
         Throw.IfNull(serviceType);
@@ -575,6 +580,7 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
             serviceKey is not null ? null :
             serviceType == typeof(VectorStoreCollectionMetadata) ? _collectionMetadata :
             serviceType == typeof(ChromaClient) ? _chromaClient.Client :
+            serviceType == typeof(IKeywordHybridSearchable<TRecord>) ? (_bm25Properties.Count > 0 ? this : null) :
             serviceType.IsInstanceOfType(this) ? this :
             null;
     }

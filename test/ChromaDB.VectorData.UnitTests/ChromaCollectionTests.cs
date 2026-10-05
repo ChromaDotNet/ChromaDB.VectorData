@@ -116,6 +116,26 @@ public class ChromaCollectionTests
         Assert.Equal(createBm25Indexes, definition!.Schema is not null);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void GetServiceOffersHybridSearchOnlyWithTheBm25Indexes(bool createBm25Indexes)
+    {
+        // The TextSearchStore of Semantic Kernel searches with keywords when the collection offers hybrid search.
+        using var sut = new ChromaCollection<string, FullTextHotel>(this._chromaClientMock.Object, TestCollectionName, new ChromaCollectionOptions { CreateBm25Indexes = createBm25Indexes });
+
+        Assert.Equal(createBm25Indexes, sut.GetService(typeof(IKeywordHybridSearchable<FullTextHotel>)) is not null);
+        Assert.Same(sut, sut.GetService(typeof(VectorStoreCollection<string, FullTextHotel>)));
+    }
+
+    [Fact]
+    public void GetServiceDoesNotOfferHybridSearchWithoutAFullTextProperty()
+    {
+        using var sut = new ChromaCollection<string, Hotel<string>>(this._chromaClientMock.Object, TestCollectionName, new ChromaCollectionOptions { CreateBm25Indexes = true });
+
+        Assert.Null(sut.GetService(typeof(IKeywordHybridSearchable<Hotel<string>>)));
+    }
+
     [Fact]
     public void ThrowsWhenAPropertyUsesTheKeyOfABm25Index()
     {

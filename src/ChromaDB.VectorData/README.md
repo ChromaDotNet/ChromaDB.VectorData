@@ -85,7 +85,7 @@ await collection.EnsureCollectionExistsAsync();
 var results = collection.HybridSearchAsync(embedding, ["pool", "spa"], top: 5);
 ```
 
-`ChromaVectorStoreOptions` has the same option for the collections of a vector store. A collection created by another client of Chroma, like the Python one, works too when it has a `chroma_bm25` index on the text of the property, or on the documents for the property stored as the document. A record without any of the keywords gets nothing from the BM25 search, as in a keyword search. A single Chroma server has neither the Search API nor sparse vector indexes.
+`ChromaVectorStoreOptions` has the same option for the collections of a vector store. Only with the option a collection answers `IKeywordHybridSearchable` from `GetService`, which the `TextSearchStore` of Semantic Kernel asks for to choose hybrid search over vector search. A collection created by another client of Chroma, like the Python one, works too when it has a `chroma_bm25` index on the text of the property, or on the documents for the property stored as the document. A record without any of the keywords gets nothing from the BM25 search, as in a keyword search. A single Chroma server has neither the Search API nor sparse vector indexes.
 
 ## Supported
 
