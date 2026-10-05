@@ -67,9 +67,9 @@ public class ChromaMapperTests
     }
 
     [Fact]
-    public void WritesANullFullTextPropertyAsAnEmptyDocument()
+    public void WritesNoDocumentForANullFullTextProperty()
     {
-        // Arrange: Chroma keeps the old document for a null one, and replaces it with an empty one.
+        // Arrange: the collection empties the document of a record that exists.
         var sut = new ChromaMapper<FullTextHotel>(new ChromaModelBuilder().Build(typeof(FullTextHotel), typeof(string), definition: null, defaultEmbeddingGenerator: null));
         var hotel = new FullTextHotel { HotelId = "h1", Description = null, Embedding = new float[] { 1, 2, 3, 4 } };
 
@@ -77,8 +77,27 @@ public class ChromaMapperTests
         var record = sut.MapFromDataToStorageModel(hotel, 0, generatedEmbeddings: null);
 
         // Assert.
-        Assert.Equal("", record.Document);
+        Assert.Null(record.Document);
         Assert.Null(record.Metadata!["Description"]);
+    }
+
+    [Theory]
+    [InlineData(8182, true)]
+    [InlineData(8183, false)]
+    public void KeepsATextTooLongForTheMetadataInTheDocumentOnly(int bytes, bool inMetadata)
+    {
+        // Arrange: Chroma Cloud takes at most 8,182 bytes per metadata value, and 16,384 per document.
+        var sut = new ChromaMapper<FullTextHotel>(new ChromaModelBuilder().Build(typeof(FullTextHotel), typeof(string), definition: null, defaultEmbeddingGenerator: null));
+        var text = new string('a', bytes - 2) + "é";
+        var hotel = new FullTextHotel { HotelId = "h1", Description = text, Embedding = new float[] { 1, 2, 3, 4 } };
+
+        // Act.
+        var record = sut.MapFromDataToStorageModel(hotel, 0, generatedEmbeddings: null);
+
+        // Assert: the text reads back from the document when the metadata does not have it.
+        Assert.Equal(text, record.Document);
+        Assert.Equal(inMetadata ? text : null, record.Metadata!["Description"]);
+        Assert.Equal(text, sut.MapFromStorageToDataModel("h1", embedding: null, metadata: null, document: record.Document, includeVectors: false).Description);
     }
 
     [Fact]

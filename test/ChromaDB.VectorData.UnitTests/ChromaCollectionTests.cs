@@ -172,10 +172,10 @@ public class ChromaCollectionTests
         // Assert: the RRF of the two searches, each among the top + skip records it ranks first, the others with the last rank;
         // the BM25 search counts only for the records with a keyword, at a distance below 1.
         Assert.Equal(
-            """{"$mul":[{"$val":-1},{"$sum":["""
-            + """{"$div":{"left":{"$val":1},"right":{"$sum":[{"$val":60},{"$knn":{"query":[1,2,3,4],"key":"#embedding","limit":3,"default":3,"return_rank":true}}]}}},"""
-            + """{"$div":{"left":{"$min":[{"$val":1},{"$mul":[{"$sub":{"left":{"$val":1},"right":{"$knn":{"query":"pool spa","key":"Description_bm25","limit":3,"default":1}}}},{"$val":1000000}]}]},"right":"""
-            + """{"$sum":[{"$val":60},{"$knn":{"query":"pool spa","key":"Description_bm25","limit":3,"default":3,"return_rank":true}}]}}}]}]}""",
+            """{"$mul":[{"$val":-1.0},{"$sum":["""
+            + """{"$div":{"left":{"$val":1.0},"right":{"$sum":[{"$val":60.0},{"$knn":{"query":[1.0,2.0,3.0,4.0],"key":"#embedding","limit":3,"default":3.0,"return_rank":true}}]}}},"""
+            + """{"$div":{"left":{"$min":[{"$val":1.0},{"$mul":[{"$sub":{"left":{"$val":1.0},"right":{"$knn":{"query":"pool spa","key":"Description_bm25","limit":3,"default":1.0}}}},{"$val":1000000.0}]}]},"right":"""
+            + """{"$sum":[{"$val":60.0},{"$knn":{"query":"pool spa","key":"Description_bm25","limit":3,"default":3.0,"return_rank":true}}]}}}]}]}""",
             search!.Rank!.ToString());
         Assert.Equal(2, search.Limit);
         Assert.Equal(1, search.Offset);
@@ -201,6 +201,9 @@ public class ChromaCollectionTests
             .Setup(x => x.UpsertAsync(It.IsAny<IReadOnlyList<string>>(), It.IsAny<IReadOnlyList<ReadOnlyMemory<float>>>(), It.IsAny<IReadOnlyList<IReadOnlyDictionary<string, object>>?>(), It.IsAny<IReadOnlyList<string>?>(), this._testCancellationToken))
             .Callback<IReadOnlyList<string>, IReadOnlyList<ReadOnlyMemory<float>>, IReadOnlyList<IReadOnlyDictionary<string, object>>?, IReadOnlyList<string>?, CancellationToken>((_, _, m, _, _) => metadatas = m)
             .Returns(Task.CompletedTask);
+        this.SetupStoredRecords(
+            ChromaGetInclude.Metadatas | ChromaGetInclude.Documents,
+            [new ChromaCollectionEntry("h1") { Document = "A gym", Metadata = new Dictionary<string, object> { ["Description"] = "A gym", ["Description_bm25"] = "sparse vector" } }]);
 
         // Act.
         await sut.UpsertAsync(
@@ -213,6 +216,26 @@ public class ChromaCollectionTests
         Assert.True(metadatas![0].ContainsKey("Description_bm25"));
         Assert.Null(metadatas[0]["Description_bm25"]);
         Assert.False(metadatas[1].ContainsKey("Description_bm25"));
+    }
+
+    [Fact]
+    public async Task UpsertOfANewRecordWithoutTextSendsNoKeyForItsSparseVectorAsync()
+    {
+        // Arrange: Chroma Cloud counts null keys against its limits, and a long property name gives a BM25 key over 36 bytes.
+        using var sut = this.CreateHybridCollection<FullTextHotel>(Bm25Index("Description_bm25", "Description"));
+        IReadOnlyList<IReadOnlyDictionary<string, object>>? metadatas = null;
+        this._collectionClientMock
+            .Setup(x => x.UpsertAsync(It.IsAny<IReadOnlyList<string>>(), It.IsAny<IReadOnlyList<ReadOnlyMemory<float>>>(), It.IsAny<IReadOnlyList<IReadOnlyDictionary<string, object>>?>(), It.IsAny<IReadOnlyList<string>?>(), this._testCancellationToken))
+            .Callback<IReadOnlyList<string>, IReadOnlyList<ReadOnlyMemory<float>>, IReadOnlyList<IReadOnlyDictionary<string, object>>?, IReadOnlyList<string>?, CancellationToken>((_, _, m, _, _) => metadatas = m)
+            .Returns(Task.CompletedTask);
+        this.SetupStoredRecords(ChromaGetInclude.Metadatas | ChromaGetInclude.Documents, []);
+
+        // Act.
+        await sut.UpsertAsync(new FullTextHotel { HotelId = "h1", Description = null, Rating = 4, Embedding = new float[] { 1, 2, 3, 4 } }, this._testCancellationToken);
+
+        // Assert.
+        Assert.False(Assert.Single(metadatas!).ContainsKey("Description_bm25"));
+        Assert.False(metadatas![0].ContainsKey("Description"));
     }
 
     [Fact]
@@ -307,13 +330,75 @@ public class ChromaCollectionTests
             .Callback<IReadOnlyList<string>, IReadOnlyList<ReadOnlyMemory<float>>, IReadOnlyList<IReadOnlyDictionary<string, object>>?, IReadOnlyList<string>?, CancellationToken>((i, e, m, _, _) => (ids, embeddings, metadatas) = (i, e, m))
             .Returns(Task.CompletedTask);
 
+        this.SetupStoredRecords();
+
         // Act.
         await sut.UpsertAsync(new Hotel<Guid> { HotelId = s_guidTestRecordKey, HotelName = "Grand", Embedding = new float[] { 1, 2, 3, 4 } }, this._testCancellationToken);
 
-        // Assert.
+        // Assert: a new record gets no null, which Chroma Cloud would count against its limits on the keys of the metadata.
         Assert.Equal(["11111111-1111-1111-1111-111111111111"], ids);
         Assert.Equal(new float[] { 1, 2, 3, 4 }, Assert.Single(embeddings!).ToArray());
         Assert.Equal("Grand", Assert.Single(metadatas!)["HotelName"]);
+        Assert.False(metadatas![0].ContainsKey("Rating"));
+        Assert.False(metadatas[0].ContainsKey("Tags"));
+    }
+
+    [Fact]
+    public async Task UpsertSendsNullsOnlyForTheKeysTheStoredRecordHasAsync()
+    {
+        // Arrange: Chroma merges the metadata of an upsert into the record that exists.
+        using var sut = this.CreateCollection<string, Hotel<string>>();
+        var metadatas = this.CaptureUpsert();
+        this.SetupStoredRecords(new ChromaCollectionEntry("h1") { Metadata = new Dictionary<string, object> { ["HotelName"] = "Grand", ["Tags"] = new List<object> { "pool" }, ["Price"] = 10d } });
+
+        // Act.
+        await sut.UpsertAsync(new Hotel<string> { HotelId = "h1", HotelName = null, Rating = null, Tags = [], Price = 12, Embedding = new float[] { 1, 2, 3, 4 } }, this._testCancellationToken);
+
+        // Assert.
+        var metadata = Assert.Single(metadatas());
+        Assert.True(metadata.ContainsKey("HotelName"));
+        Assert.Null(metadata["HotelName"]);
+        Assert.True(metadata.ContainsKey("Tags"));
+        Assert.Null(metadata["Tags"]);
+        Assert.False(metadata.ContainsKey("Rating"));
+        Assert.Equal(12d, metadata["Price"]);
+    }
+
+    [Fact]
+    public async Task UpsertWithAValueForEveryPropertyReadsNothingAsync()
+    {
+        // Arrange: the strict mock fails on a read, as there is nothing to delete.
+        using var sut = this.CreateCollection<string, Hotel<string>>();
+        var metadatas = this.CaptureUpsert();
+
+        // Act.
+        await sut.UpsertAsync(new Hotel<string> { HotelId = "h1", HotelName = "Grand", Rating = 4, Tags = ["pool"], Embedding = new float[] { 1, 2, 3, 4 } }, this._testCancellationToken);
+
+        // Assert.
+        Assert.Equal("Grand", Assert.Single(metadatas())["HotelName"]);
+    }
+
+    [Theory]
+    [InlineData("old text", "")]
+    [InlineData(null, null)]
+    public async Task UpsertOfANullTextEmptiesOnlyADocumentThatExistsAsync(string? storedDocument, string? expectedDocument)
+    {
+        // Arrange: Chroma keeps the document of a record that exists for a null one, and replaces it with an empty one.
+        using var sut = this.CreateCollection<string, FullTextHotel>();
+        IReadOnlyList<string>? documents = null;
+        this._collectionClientMock
+            .Setup(x => x.UpsertAsync(It.IsAny<IReadOnlyList<string>>(), It.IsAny<IReadOnlyList<ReadOnlyMemory<float>>>(), It.IsAny<IReadOnlyList<IReadOnlyDictionary<string, object>>?>(), It.IsAny<IReadOnlyList<string>?>(), this._testCancellationToken))
+            .Callback<IReadOnlyList<string>, IReadOnlyList<ReadOnlyMemory<float>>, IReadOnlyList<IReadOnlyDictionary<string, object>>?, IReadOnlyList<string>?, CancellationToken>((_, _, _, d, _) => documents = d)
+            .Returns(Task.CompletedTask);
+        this.SetupStoredRecords(
+            ChromaGetInclude.Metadatas | ChromaGetInclude.Documents,
+            storedDocument is null ? [] : [new ChromaCollectionEntry("h1") { Document = storedDocument, Metadata = new Dictionary<string, object> { ["Description"] = storedDocument } }]);
+
+        // Act.
+        await sut.UpsertAsync(new FullTextHotel { HotelId = "h1", Description = null, Embedding = new float[] { 1, 2, 3, 4 } }, this._testCancellationToken);
+
+        // Assert.
+        Assert.Equal(expectedDocument, Assert.Single(documents!));
     }
 
     [Fact]
@@ -563,6 +648,25 @@ public class ChromaCollectionTests
     [Fact]
     public void RejectsUnsupportedKeyTypes()
         => Assert.Throws<NotSupportedException>(() => new ChromaCollection<int, Hotel<int>>(this._chromaClientMock.Object, TestCollectionName));
+
+    // The records Chroma has before an upsert, read to delete what is gone; none by default.
+    private void SetupStoredRecords(params ChromaCollectionEntry[] entries)
+        => this.SetupStoredRecords(ChromaGetInclude.Metadatas, entries);
+
+    private void SetupStoredRecords(ChromaGetInclude include, IReadOnlyList<ChromaCollectionEntry> entries)
+        => this._collectionClientMock
+            .Setup(x => x.GetAsync(It.IsAny<IReadOnlyList<string>>(), null, null, null, null, include, this._testCancellationToken))
+            .ReturnsAsync(entries);
+
+    private Func<IReadOnlyList<IReadOnlyDictionary<string, object>>> CaptureUpsert()
+    {
+        IReadOnlyList<IReadOnlyDictionary<string, object>>? metadatas = null;
+        this._collectionClientMock
+            .Setup(x => x.UpsertAsync(It.IsAny<IReadOnlyList<string>>(), It.IsAny<IReadOnlyList<ReadOnlyMemory<float>>>(), It.IsAny<IReadOnlyList<IReadOnlyDictionary<string, object>>?>(), It.IsAny<IReadOnlyList<string>?>(), this._testCancellationToken))
+            .Callback<IReadOnlyList<string>, IReadOnlyList<ReadOnlyMemory<float>>, IReadOnlyList<IReadOnlyDictionary<string, object>>?, IReadOnlyList<string>?, CancellationToken>((_, _, m, _, _) => metadatas = m)
+            .Returns(Task.CompletedTask);
+        return () => metadatas!;
+    }
 
 #pragma warning disable IL2026, IL3050 // The test models are not trimmed
     private ChromaCollection<TKey, TRecord> CreateCollection<TKey, TRecord>()

@@ -79,6 +79,20 @@ public class ChromaCollectionCreateMappingTests
     }
 
     [Fact]
+    public void MapCollectionDefinitionTakesTheBm25VectorsOfTheDocumentPropertyFromTheDocument()
+    {
+        // Arrange: the only full-text property is stored as the document, which holds also a text too long for the metadata.
+        var model = BuildModel(typeof(FullTextHotel));
+
+        // Act.
+        var definition = ChromaCollectionCreateMapping.MapCollectionDefinition("hotels", model.VectorProperty, ChromaCollectionCreateMapping.GetBm25Properties(model), ChromaFieldMapping.GetDocumentProperty(model));
+
+        // Assert.
+        Assert.Contains("\"Description_bm25\":{\"sparse_vector\":{\"sparse_vector_index\":{\"enabled\":true,\"config\":{", definition.Schema!.ToString());
+        Assert.Contains("\"source_key\":\"#document\"", definition.Schema.ToString());
+    }
+
+    [Fact]
     public void GetBm25PropertiesTakesTheStringPropertiesWithFullTextIndexing()
     {
         Assert.Equal(["Description", "Review"], ChromaCollectionCreateMapping.GetBm25Properties(BuildModel(typeof(TwoFullTextHotel))).Select(p => p.ModelName));

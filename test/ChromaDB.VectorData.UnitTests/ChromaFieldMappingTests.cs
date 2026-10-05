@@ -24,12 +24,18 @@ public class ChromaFieldMappingTests
     }
 
     [Fact]
-    public void ToMetadataValueWritesDatesAsRoundTripStrings()
+    public void ToMetadataValueWritesDateTimeOffsetsInUtc()
     {
+        // Equal instants are equal strings, as == compares them in C#.
         var date = new DateTimeOffset(2026, 10, 4, 12, 30, 0, TimeSpan.FromHours(2));
 
-        Assert.Equal("2026-10-04T12:30:00.0000000+02:00", ChromaFieldMapping.ToMetadataValue(date));
+        Assert.Equal("2026-10-04T10:30:00.0000000+00:00", ChromaFieldMapping.ToMetadataValue(date));
+        Assert.Equal(date, ChromaFieldMapping.FromMetadataValue(ChromaFieldMapping.ToMetadataValue(date), typeof(DateTimeOffset)));
     }
+
+    [Fact]
+    public void ToMetadataValueWritesDateTimesAsRoundTripStrings()
+        => Assert.Equal("2026-10-04T12:30:00.0000000Z", ChromaFieldMapping.ToMetadataValue(new DateTime(2026, 10, 4, 12, 30, 0, DateTimeKind.Utc)));
 
     [Fact]
     public void ToMetadataValueWritesArraysAsLists()

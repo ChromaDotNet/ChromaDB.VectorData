@@ -174,7 +174,7 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
     {
         // Chroma indexes every metadata field for filtering, so IsIndexed has no effect. IsFullTextIndexed creates a BM25 index for
         // hybrid search only with CreateBm25Indexes: only Chroma Cloud has these indexes.
-        var definition = ChromaCollectionCreateMapping.MapCollectionDefinition(Name, _model.VectorProperty, _bm25Properties);
+        var definition = ChromaCollectionCreateMapping.MapCollectionDefinition(Name, _model.VectorProperty, _bm25Properties, ChromaFieldMapping.GetDocumentProperty(_model));
 
         var collection = await RunOperationAsync(
             "EnsureCollectionExists",
@@ -305,7 +305,6 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
         var embeddings = new List<ReadOnlyMemory<float>>();
         var metadatas = new List<Dictionary<string, object>>();
         var documents = new List<string>();
-        var hasMetadata = false;
         var recordIndex = 0;
         foreach (var record in records)
         {
@@ -319,7 +318,6 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
             embeddings.Add(storageRecord.Embedding);
             metadatas.Add(storageRecord.Metadata!);
             documents.Add(storageRecord.Document!);
-            hasMetadata |= storageRecord.Metadata is not null;
         }
 
         if (ids.Count == 0)
@@ -329,47 +327,88 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
 
         await RunOperationAsync(
             UpsertName,
-            () => RunOnCollectionAsync(collection =>
+            () => RunOnCollectionAsync(async collection =>
             {
-                if (hasMetadata)
-                {
-                    DeleteSparseVectorsOfNullTexts(collection, metadatas, documents);
-                }
-
-                return GetCollectionClient(collection).UpsertAsync(
-                    ids,
-                    embeddings,
-                    hasMetadata ? metadatas : null,
-                    _mapper.HasDocument ? documents : null,
-                    cancellationToken);
+                var (upsertMetadatas, upsertDocuments) = await PrepareUpsertAsync(collection, ids, metadatas, documents, cancellationToken).ConfigureAwait(false);
+                await GetCollectionClient(collection).UpsertAsync(ids, embeddings, upsertMetadatas, upsertDocuments, cancellationToken).ConfigureAwait(false);
             }, cancellationToken)).ConfigureAwait(false);
     }
 
     /// <summary>
-    /// The client computes the vectors of the sparse vector indexes, like the BM25 ones, from the text they come from, and none
-    /// for a record without the text. An upsert of an existing record merges its metadata, so a record whose text is now null
-    /// gets an explicit null for the vector, which deletes the old one: otherwise a search would still find its old words.
+    /// Get the metadata and documents of an upsert that replaces the records that exist. Chroma merges the metadata of an upsert
+    /// into the record that exists, and keeps its document for a null one: what is gone is deleted with an explicit null, and
+    /// with an empty document for a null text. Only what the stored record has, read first: Chroma Cloud counts the keys of
+    /// the metadata, the null ones too, against its limits of 32 keys and 36 bytes per key. The client computes the vectors of
+    /// the sparse vector indexes, like the BM25 ones, from their text, and none without it: the old vector of a text that is
+    /// gone is deleted too, or a search would still find its words.
     /// </summary>
-    private static void DeleteSparseVectorsOfNullTexts(ChromaCollection collection, List<Dictionary<string, object>> metadatas, List<string> documents)
+    private async Task<(List<Dictionary<string, object>>? Metadatas, List<string>? Documents)> PrepareUpsertAsync(
+        ChromaCollection collection,
+        List<string> ids,
+        List<Dictionary<string, object>> metadatas,
+        List<string> documents,
+        CancellationToken cancellationToken)
     {
-        foreach (var index in collection.SparseVectorIndexes)
-        {
-            if (index.SourceKey is not { } sourceKey)
-            {
-                continue;
-            }
+        var hasDocument = _mapper.HasDocument;
 
-            for (var i = 0; i < metadatas.Count; i++)
+        // A record has something to delete only with a null value, or a null text for its document.
+        var candidates = new HashSet<string>();
+        for (var i = 0; i < ids.Count; i++)
+        {
+            if (metadatas[i]?.ContainsValue(null!) is true || (hasDocument && documents[i] is null))
             {
-                var hasNoText = sourceKey == ChromaSearchKeys.Document
-                    ? i < documents.Count && documents[i] is null or { Length: 0 }
-                    : metadatas[i].TryGetValue(sourceKey, out var text) && text is null;
-                if (hasNoText)
-                {
-                    metadatas[i][index.Key] = null!;
-                }
+                candidates.Add(ids[i]);
             }
         }
+
+        var stored = new Dictionary<string, ChromaCollectionEntry>();
+        if (candidates.Count > 0)
+        {
+            var entries = await GetCollectionClient(collection).GetAsync(
+                candidates.ToList(),
+                include: ChromaGetInclude.Metadatas | (hasDocument ? ChromaGetInclude.Documents : 0),
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+            foreach (var entry in entries)
+            {
+                stored[entry.Id] = entry;
+            }
+        }
+
+        var sparseVectorIndexes = collection.SparseVectorIndexes.Where(index => index.SourceKey is not null).ToList();
+        var upsertMetadatas = new List<Dictionary<string, object>>(ids.Count);
+        var upsertDocuments = hasDocument ? new List<string>(ids.Count) : null;
+        var hasMetadata = false;
+        for (var i = 0; i < ids.Count; i++)
+        {
+            var storedRecord = stored.TryGetValue(ids[i], out var entry) ? entry : null;
+            var storedMetadata = storedRecord?.Metadata;
+
+            Dictionary<string, object>? metadata = null;
+            foreach (var pair in metadatas[i] ?? [])
+            {
+                if (pair.Value is not null || storedMetadata?.ContainsKey(pair.Key) is true)
+                {
+                    (metadata ??= [])[pair.Key] = pair.Value!;
+                }
+            }
+
+            foreach (var index in sparseVectorIndexes)
+            {
+                var textIsGone = index.SourceKey == ChromaSearchKeys.Document
+                    ? hasDocument && documents[i] is null
+                    : metadatas[i]?.TryGetValue(index.SourceKey!, out var text) is true && text is null;
+                if (textIsGone && storedMetadata?.ContainsKey(index.Key) is true)
+                {
+                    (metadata ??= [])[index.Key] = null!;
+                }
+            }
+
+            upsertMetadatas.Add(metadata!);
+            hasMetadata |= metadata is not null;
+            upsertDocuments?.Add(documents[i] is null && storedRecord?.Document is { Length: > 0 } ? string.Empty : documents[i]);
+        }
+
+        return (hasMetadata ? upsertMetadatas : null, upsertDocuments);
     }
 
     #region Search

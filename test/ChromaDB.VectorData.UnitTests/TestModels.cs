@@ -31,6 +31,24 @@ public sealed class Hotel<TKey>
     public ReadOnlyMemory<float>? Embedding { get; set; }
 }
 
+public sealed class DatedHotel
+{
+    [VectorStoreKey]
+    public string HotelId { get; set; } = default!;
+
+    [VectorStoreData]
+    public DateTimeOffset Opened { get; set; }
+
+    [VectorStoreData]
+    public DateTime Updated { get; set; }
+
+    [VectorStoreData]
+    public List<DateTimeOffset>? Visits { get; set; }
+
+    [VectorStoreVector(4)]
+    public ReadOnlyMemory<float>? Embedding { get; set; }
+}
+
 public sealed class DotProductHotel
 {
     [VectorStoreKey]

@@ -24,9 +24,10 @@ internal static class ChromaCollectionCreateMapping
     /// <param name="name">The name of the collection.</param>
     /// <param name="vectorProperty">The vector property.</param>
     /// <param name="bm25Properties">The properties to create a BM25 index for.</param>
+    /// <param name="documentProperty">The property stored as the document, whose BM25 index comes from the document, or <see langword="null"/>.</param>
     /// <returns>The definition to create the collection with.</returns>
     /// <exception cref="NotSupportedException">Thrown if the property has options that Chroma does not support.</exception>
-    public static ChromaCollectionDefinition MapCollectionDefinition(string name, VectorPropertyModel vectorProperty, IReadOnlyList<DataPropertyModel> bm25Properties)
+    public static ChromaCollectionDefinition MapCollectionDefinition(string name, VectorPropertyModel vectorProperty, IReadOnlyList<DataPropertyModel> bm25Properties, DataPropertyModel? documentProperty = null)
     {
         if (vectorProperty.IndexKind is not null and not IndexKind.Hnsw)
         {
@@ -37,7 +38,9 @@ internal static class ChromaCollectionCreateMapping
         foreach (var property in bm25Properties)
         {
             // bm25: true makes Chroma apply the inverse document frequency, and the client computes the vectors from the text of the property.
-            schema = (schema ?? new()).WithSparseVectorIndex(GetBm25Key(property), property.StorageName, bm25: true, ChromaEmbeddingFunctionReference.ChromaBm25());
+            // The document holds the text of the property stored as the document also when it is too long for the metadata.
+            var sourceKey = property == documentProperty ? ChromaSearchKeys.Document : property.StorageName;
+            schema = (schema ?? new()).WithSparseVectorIndex(GetBm25Key(property), sourceKey, bm25: true, ChromaEmbeddingFunctionReference.ChromaBm25());
         }
 
         return new(name) { Configuration = new() { Space = GetSpace(vectorProperty) }, Schema = schema };

@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Diagnostics;
+using System.Text;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.VectorData.ProviderServices;
 
@@ -19,6 +20,9 @@ internal readonly record struct ChromaStorageRecord(string Id, ReadOnlyMemory<fl
 internal sealed class ChromaMapper<TRecord>(CollectionModel model)
     where TRecord : class
 {
+    /// <summary>The most bytes of a metadata value in Chroma Cloud.</summary>
+    private const int MaxMetadataValueBytes = 8182;
+
     private readonly DataPropertyModel? _documentProperty = ChromaFieldMapping.GetDocumentProperty(model);
 
     /// <summary>Gets a value indicating whether the records have a Chroma document, from the full-text property.</summary>
@@ -31,15 +35,20 @@ internal sealed class ChromaMapper<TRecord>(CollectionModel model)
             ?? throw new InvalidOperationException($"Missing key property '{keyProperty.ModelName}' on provided record of type '{typeof(TRecord).Name}'.");
 
         // Chroma metadata has no null values, and Chroma drops empty lists: neither is stored, and both come back as null.
-        // An upsert of an existing record merges its metadata, so they go as an explicit null, which deletes the old value.
+        // They are marked with null here: the collection deletes them from a record that exists, which keeps its old metadata otherwise.
+        // The text of the property stored as the document goes in the metadata too, for the filters on it, when it fits: Chroma Cloud
+        // takes at most 8,182 bytes per metadata value, and twice as much per document.
         Dictionary<string, object>? metadata = null;
         foreach (var property in model.DataProperties)
         {
             (metadata ??= []).Add(
                 property.StorageName,
-                ChromaFieldMapping.ToMetadataValue(property.GetValueAsObject(dataModel)) is { } value and not System.Collections.ICollection { Count: 0 }
-                    ? value
-                    : null!);
+                ChromaFieldMapping.ToMetadataValue(property.GetValueAsObject(dataModel)) switch
+                {
+                    null or System.Collections.ICollection { Count: 0 } => null!,
+                    string text when property == _documentProperty && Encoding.UTF8.GetByteCount(text) > MaxMetadataValueBytes => null!,
+                    var value => value
+                });
         }
 
         // There is exactly one vector property, as verified by the model builder.
@@ -52,9 +61,8 @@ internal sealed class ChromaMapper<TRecord>(CollectionModel model)
                 ? model.VectorProperty.GetValueAsObject(dataModel)
                 : generatedEmbeddings[0]![recordIndex]);
 
-        // The full-text property stays in the metadata too, for the filters on it. Chroma keeps the old document for a null one,
-        // so a null text is an empty document, which reads back as null.
-        var document = _documentProperty is null ? null : _documentProperty.GetValueAsObject(dataModel) as string ?? string.Empty;
+        // The full-text property is the document; the collection empties the document of a record that exists for a null text.
+        var document = _documentProperty?.GetValueAsObject(dataModel) as string;
 
         return new ChromaStorageRecord(ChromaFieldMapping.ToId(key), embedding, metadata, document);
 
@@ -101,7 +109,8 @@ internal sealed class ChromaMapper<TRecord>(CollectionModel model)
             }
             else if (dataProperty == _documentProperty && document is { Length: > 0 })
             {
-                // A record written by another Chroma client has its text in the document only.
+                // A text too long for the metadata, or written by another Chroma client, is in the document only; an empty
+                // document is the one of a null text.
                 dataProperty.SetValueAsObject(outputRecord, document);
             }
             else if (!dataProperty.Type.IsValueType || Nullable.GetUnderlyingType(dataProperty.Type) is not null)

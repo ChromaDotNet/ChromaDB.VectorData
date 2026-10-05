@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Collections;
+using System.Globalization;
 using System.Linq.Expressions;
 using ChromaDB.Client;
 using Microsoft.Extensions.VectorData.ProviderServices;
@@ -204,13 +205,17 @@ internal class ChromaFilterTranslator : FilterTranslatorBase
                 : throw new NotSupportedException("Invalid equality/comparison");
 
     private static ChromaWhereOperator GenerateEqual(string propertyStorageName, object? value, bool negated)
-    {
-        var metadataValue = ToFilterValue(value);
+        => ToFilterValues(value) switch
+        {
+            [var metadataValue] => negated
+                ? ChromaWhereOperator.NotEqual(propertyStorageName, metadataValue)
+                : ChromaWhereOperator.Equal(propertyStorageName, metadataValue),
 
-        return negated
-            ? ChromaWhereOperator.NotEqual(propertyStorageName, metadataValue)
-            : ChromaWhereOperator.Equal(propertyStorageName, metadataValue);
-    }
+            // A date that Chroma may have stored in more than one form.
+            var metadataValues => negated
+                ? ChromaWhereOperator.NotIn(propertyStorageName, metadataValues)
+                : ChromaWhereOperator.In(propertyStorageName, metadataValues)
+        };
 
     private Condition TranslateComparison(BinaryExpression comparison, bool negated)
     {
@@ -325,9 +330,12 @@ internal class ChromaFilterTranslator : FilterTranslatorBase
                     throw new NotSupportedException("Unsupported item in Contains");
                 }
 
-                return negated
-                    ? ChromaWhereOperator.NotContains(property.StorageName, ToFilterValue(value))
-                    : ChromaWhereOperator.Contains(property.StorageName, ToFilterValue(value));
+                // A date that Chroma may have stored in more than one form: the field contains any of them.
+                return ToFilterValues(value)
+                    .Select(metadataValue => negated
+                        ? ChromaWhereOperator.NotContains(property.StorageName, metadataValue)
+                        : ChromaWhereOperator.Contains(property.StorageName, metadataValue))
+                    .Aggregate((left, right) => negated ? left & right : left | right);
 
             // Contains over inline enumerable
             case NewArrayExpression newArray:
@@ -347,7 +355,7 @@ internal class ChromaFilterTranslator : FilterTranslatorBase
                 throw new NotSupportedException("Unsupported item type in Contains");
             }
 
-            var values = elements.Cast<object?>().Select(ToFilterValue).ToArray();
+            var values = elements.Cast<object?>().SelectMany(ToFilterValues).Distinct().ToArray();
 
             return values.Length switch
             {
@@ -381,9 +389,11 @@ internal class ChromaFilterTranslator : FilterTranslatorBase
         };
 
         var conditions = values.Cast<object?>()
+            .SelectMany(ToFilterValues)
+            .Distinct()
             .Select(value => negated
-                ? ChromaWhereOperator.NotContains(property.StorageName, ToFilterValue(value))
-                : ChromaWhereOperator.Contains(property.StorageName, ToFilterValue(value)))
+                ? ChromaWhereOperator.NotContains(property.StorageName, value)
+                : ChromaWhereOperator.Contains(property.StorageName, value))
             .ToList();
 
         return conditions.Count switch
@@ -415,6 +425,29 @@ internal class ChromaFilterTranslator : FilterTranslatorBase
             null => throw new NotSupportedException("Chroma does not support filtering on null values."),
             IList => throw new NotSupportedException("Chroma does not support comparing an array property with an array."),
             var metadataValue => metadataValue
+        };
+
+    // Dates are stored as strings, and == in C# compares instants for DateTimeOffset and ticks for DateTime: a filter matches
+    // every form in which Chroma may hold the same value.
+    // - DateTimeOffset: in UTC, as the provider stores it, and with its own offset, as versions before 0.3.5 stored it.
+    // - DateTime: with the same ticks and each kind, Utc, Unspecified and Local (with the time zone of this machine).
+    private static object[] ToFilterValues(object? value)
+        => value switch
+        {
+            DateTimeOffset dateTimeOffset => new object[]
+            {
+                ToFilterValue(dateTimeOffset),
+                dateTimeOffset.ToString("O", CultureInfo.InvariantCulture),
+            }.Distinct().ToArray(),
+
+            DateTime dateTime => new object[]
+            {
+                ToFilterValue(DateTime.SpecifyKind(dateTime, DateTimeKind.Utc)),
+                ToFilterValue(DateTime.SpecifyKind(dateTime, DateTimeKind.Unspecified)),
+                ToFilterValue(DateTime.SpecifyKind(dateTime, DateTimeKind.Local)),
+            }.Distinct().ToArray(),
+
+            _ => [ToFilterValue(value)]
         };
 
     // A condition on the metadata: a where clause, every record (no where clause), or no record.

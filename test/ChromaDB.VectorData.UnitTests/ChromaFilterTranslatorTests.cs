@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System;
+using System.Globalization;
 using System.Linq;
 using System.Linq.Expressions;
 using Microsoft.Extensions.VectorData.ProviderServices;
@@ -23,7 +24,7 @@ public class ChromaFilterTranslatorTests
 
     [Fact]
     public void TranslatesAComparisonWithTheConstantOnTheLeft()
-        => Assert.Equal("""{"Price":{"$lt":100}}""", Translate(h => 100 > h.Price));
+        => Assert.Equal("""{"Price":{"$lt":100.0}}""", Translate(h => 100 > h.Price));
 
     [Fact]
     public void TranslatesAndAndOr()
@@ -205,6 +206,58 @@ public class ChromaFilterTranslatorTests
     [Fact]
     public void ThrowsForContainsOnAStringPropertyThatIsNotTheDocument()
         => Assert.Throws<NotSupportedException>(() => TranslateFilter(h => h.HotelName!.Contains("Grand")));
+
+    [Fact]
+    public void EqualityOnADateTimeOffsetMatchesItsUtcFormAndItsOwnForm()
+    {
+        // The provider stores it in UTC; versions before 0.3.5 stored it with its own offset.
+        var opened = new DateTimeOffset(2026, 10, 5, 13, 0, 0, TimeSpan.FromHours(2));
+
+        Assert.Equal(
+            """{"Opened":{"$in":["2026-10-05T11:00:00.0000000+00:00","2026-10-05T13:00:00.0000000+02:00"]}}""",
+            TranslateDated(h => h.Opened == opened));
+        Assert.Equal(
+            """{"Opened":{"$nin":["2026-10-05T11:00:00.0000000+00:00","2026-10-05T13:00:00.0000000+02:00"]}}""",
+            TranslateDated(h => h.Opened != opened));
+    }
+
+    [Fact]
+    public void EqualityOnAUtcDateTimeOffsetIsOneValue()
+    {
+        var opened = new DateTimeOffset(2026, 10, 5, 11, 0, 0, TimeSpan.Zero);
+
+        Assert.Equal("""{"Opened":{"$eq":"2026-10-05T11:00:00.0000000+00:00"}}""", TranslateDated(h => h.Opened == opened));
+    }
+
+    [Fact]
+    public void EqualityOnADateTimeMatchesTheSameTicksOfEachKind()
+    {
+        // == compares the ticks of two DateTime values, whatever their kind.
+        var updated = new DateTime(2026, 10, 5, 11, 0, 0, DateTimeKind.Unspecified);
+        var local = DateTime.SpecifyKind(updated, DateTimeKind.Local).ToString("O", CultureInfo.InvariantCulture);
+
+        Assert.Equal(
+            $$$"""{"Updated":{"$in":["2026-10-05T11:00:00.0000000Z","2026-10-05T11:00:00.0000000","{{{local}}}"]}}""",
+            TranslateDated(h => h.Updated == updated));
+    }
+
+    [Fact]
+    public void ContainsOnADateTimeOffsetArrayMatchesEitherForm()
+    {
+        var visit = new DateTimeOffset(2026, 10, 5, 13, 0, 0, TimeSpan.FromHours(2));
+
+        Assert.Equal(
+            """{"$or":[{"Visits":{"$contains":"2026-10-05T11:00:00.0000000+00:00"}},{"Visits":{"$contains":"2026-10-05T13:00:00.0000000+02:00"}}]}""",
+            TranslateDated(h => h.Visits!.Contains(visit)));
+        Assert.Equal(
+            """{"$and":[{"Visits":{"$not_contains":"2026-10-05T11:00:00.0000000+00:00"}},{"Visits":{"$not_contains":"2026-10-05T13:00:00.0000000+02:00"}}]}""",
+            TranslateDated(h => !h.Visits!.Contains(visit)));
+    }
+
+    // The JSON of the client escapes the + of an offset as +, as System.Text.Json does: put it back to read the dates.
+    private static string TranslateDated(Expression<Func<DatedHotel, bool>> filter)
+        => new ChromaFilterTranslator().Translate(filter, new ChromaModelBuilder().Build(typeof(DatedHotel), typeof(string), definition: null, defaultEmbeddingGenerator: null))
+            .Where!.ToString().Replace("\\u002B", "+");
 
     private static ChromaFilter TranslateFullText(Expression<Func<FullTextHotel, bool>> filter)
         => new ChromaFilterTranslator().Translate(filter, new ChromaModelBuilder().Build(typeof(FullTextHotel), typeof(string), definition: null, defaultEmbeddingGenerator: null));

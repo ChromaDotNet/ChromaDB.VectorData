@@ -46,7 +46,8 @@ internal static class ChromaFieldMapping
         {
             null => null,
             int or long or float or double or bool or string => sourceValue,
-            DateTimeOffset dateTimeOffsetValue => dateTimeOffsetValue.ToString("O", CultureInfo.InvariantCulture),
+            // In UTC, so that equal instants are equal strings, as == compares them in C#.
+            DateTimeOffset dateTimeOffsetValue => dateTimeOffsetValue.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture),
             DateTime dateTimeValue => dateTimeValue.ToString("O", CultureInfo.InvariantCulture),
 #if NET
             DateOnly dateOnlyValue => dateOnlyValue.ToString("O", CultureInfo.InvariantCulture),

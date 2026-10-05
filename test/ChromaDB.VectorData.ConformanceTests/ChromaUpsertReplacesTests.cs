@@ -115,6 +115,79 @@ public sealed class ChromaUpsertReplacesTests : IAsyncLifetime
         }
     }
 
+    [Fact]
+    public async Task Many_properties_with_one_value_fit_the_limits_of_Chroma_Cloud()
+    {
+        // Chroma Cloud takes at most 32 metadata keys per record, and counts the null ones: a new record gets no null, and a
+        // record that exists gets one only for the keys it has.
+        var definition = new VectorStoreCollectionDefinition
+        {
+            Properties =
+            [
+                new VectorStoreKeyProperty("Key", typeof(string)),
+                .. Enumerable.Range(0, 33).Select(i => new VectorStoreDataProperty($"P{i:00}", typeof(string))),
+                new VectorStoreVectorProperty("Vector", typeof(ReadOnlyMemory<float>), 2),
+            ]
+        };
+        using var collection = ChromaTestStore.Instance.DefaultVectorStore.GetDynamicCollection(CollectionName + "-many", definition);
+        await collection.EnsureCollectionDeletedAsync();
+        await collection.EnsureCollectionExistsAsync();
+        try
+        {
+            await collection.UpsertAsync(new Dictionary<string, object?> { ["Key"] = "u", ["P00"] = "first", ["Vector"] = new ReadOnlyMemory<float>([1, 0]) });
+            await collection.UpsertAsync(new Dictionary<string, object?> { ["Key"] = "u", ["P01"] = "second", ["Vector"] = new ReadOnlyMemory<float>([1, 0]) });
+
+            var item = await collection.GetAsync("u");
+            Assert.NotNull(item);
+            Assert.Null(item["P00"]);
+            Assert.Equal("second", item["P01"]);
+        }
+        finally
+        {
+            await collection.EnsureCollectionDeletedAsync();
+        }
+    }
+
+    [Fact]
+    public async Task A_null_full_text_property_sends_no_key_for_its_BM25_vector()
+    {
+        // On Chroma Cloud a metadata key has at most 36 bytes: the BM25 vector of a property with a long name never fits,
+        // and a null value sends nothing for it.
+        Assert.SkipUnless(ChromaTestStore.IsChromaCloud, "BM25 indexes need Chroma Cloud.");
+
+        using var collection = ChromaTestStore.Instance.CreateCollectionWithBm25Indexes<LongNameItem>(CollectionName + "-long-name", new VectorStoreCollectionDefinition
+        {
+            Properties =
+            [
+                new VectorStoreKeyProperty(nameof(LongNameItem.Key), typeof(string)),
+                new VectorStoreDataProperty(nameof(LongNameItem.Text), typeof(string)) { IsFullTextIndexed = true },
+                new VectorStoreDataProperty(nameof(LongNameItem.ProductDescriptionInMarkdownText), typeof(string)) { IsFullTextIndexed = true },
+                new VectorStoreVectorProperty(nameof(LongNameItem.Vector), typeof(ReadOnlyMemory<float>), 2),
+            ]
+        });
+        await collection.EnsureCollectionDeletedAsync();
+        await collection.EnsureCollectionExistsAsync();
+        try
+        {
+            await collection.UpsertAsync(new LongNameItem { Key = "u", Text = "pool and spa", Vector = new float[] { 1, 0 } });
+            await collection.UpsertAsync(new LongNameItem { Key = "u", Text = "gym", Vector = new float[] { 1, 0 } });
+
+            Assert.Equal("gym", (await collection.GetAsync("u"))?.Text);
+        }
+        finally
+        {
+            await collection.EnsureCollectionDeletedAsync();
+        }
+    }
+
+    public sealed class LongNameItem
+    {
+        public string Key { get; set; } = "";
+        public string? Text { get; set; }
+        public string? ProductDescriptionInMarkdownText { get; set; }
+        public ReadOnlyMemory<float> Vector { get; set; }
+    }
+
     public sealed class Item
     {
         [VectorStoreKey]
