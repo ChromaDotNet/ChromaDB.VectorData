@@ -25,11 +25,13 @@
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>icon.png</PackageIcon>
   </PropertyGroup>
 
   <ItemGroup>
     <!-- The MIT license asks for its notices in every copy: the package carries them. -->
     <None Include="$(MSBuildThisFileDirectory)LICENSE" Visible="false" Pack="true" PackagePath="" />
+    <None Include="$(MSBuildThisFileDirectory)icon.png" Visible="false" Pack="true" PackagePath="" />
   </ItemGroup>
 
   <Import Project="$(MSBuildThisFileDirectory)eng/LegacySupport.props" />
