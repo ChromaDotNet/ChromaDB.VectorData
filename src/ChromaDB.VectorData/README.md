@@ -117,4 +117,4 @@ var results = collection.HybridSearchAsync(new float[] { 0.1f, 0.2f, 0.3f, 0.4f 
 - Hybrid search needs Chroma Cloud.
 - Only one property can be the document: with more full-text indexed string properties, none is.
 
-The provider runs the Microsoft.Extensions.VectorData conformance tests against Chroma 1.5.0, 1.5.9 and the latest release, and passes them on Chroma Cloud.
+The provider runs the Microsoft.Extensions.VectorData conformance tests in CI against Chroma 1.5.0, 1.5.9 and the latest release; on Chroma Cloud, hybrid search included, they are run by hand and pass.
