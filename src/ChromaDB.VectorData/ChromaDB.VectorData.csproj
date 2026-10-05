@@ -9,8 +9,8 @@
     <IsAotCompatible Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">true</IsAotCompatible>
 
     <Title>Chroma provider for Microsoft.Extensions.VectorData</Title>
-    <Description>Chroma provider for Microsoft.Extensions.VectorData, built on ChromaDotNet.Client.</Description>
-    <PackageTags>chroma chromadb vector database vectordata ai</PackageTags>
+    <Description>Microsoft.Extensions.VectorData provider for Chroma and Chroma Cloud, built on ChromaDotNet.Client. Community project, not affiliated with Chroma.</Description>
+    <PackageTags>chroma chromadb chroma-cloud vector database vectordata ai</PackageTags>
   </PropertyGroup>
   
   <ItemGroup>
