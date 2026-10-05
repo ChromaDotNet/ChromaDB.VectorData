@@ -22,6 +22,8 @@ The conformance tests start Chroma in a container with [Testcontainers](https://
 CHROMA_TEST_URI=https://api.trychroma.com CHROMA_TEST_TOKEN=<api key> CHROMA_TEST_TENANT=<tenant> CHROMA_TEST_DATABASE=<database> dotnet test test/ChromaDB.VectorData.ConformanceTests
 ```
 
+Hybrid search needs the Search API and the sparse vector indexes of Chroma Cloud: its tests run only against Chroma Cloud, and are skipped otherwise.
+
 ## Origin
 
 The provider started as a copy of the Qdrant provider of [CommunityToolkit/AI](https://github.com/CommunityToolkit/AI), under the MIT license, adapted to Chroma.
