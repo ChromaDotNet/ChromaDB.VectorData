@@ -33,8 +33,9 @@ public class ChromaMapperTests
     }
 
     [Fact]
-    public void LeavesNullPropertiesOutOfTheMetadata()
+    public void WritesNullPropertiesAsExplicitNulls()
     {
+        // An upsert of an existing record merges its metadata in Chroma: an explicit null deletes the old value.
         // Arrange.
         var sut = new ChromaMapper<Hotel<string>>(BuildModel<string>());
         var hotel = new Hotel<string> { HotelId = "h1", HotelName = null, Rating = 4, Embedding = new float[] { 1, 2, 3, 4 } };
@@ -43,14 +44,15 @@ public class ChromaMapperTests
         var metadata = sut.MapFromDataToStorageModel(hotel, 0, generatedEmbeddings: null).Metadata!;
 
         // Assert.
-        Assert.False(metadata.ContainsKey("HotelName"));
+        Assert.True(metadata.ContainsKey("HotelName"));
+        Assert.Null(metadata["HotelName"]);
         Assert.Equal(4, metadata["Rating"]);
         Assert.Equal(0d, metadata["Price"]);
         Assert.Equal(false, metadata["Parking"]);
     }
 
     [Fact]
-    public void LeavesEmptyListsOutOfTheMetadata()
+    public void WritesEmptyListsAsExplicitNulls()
     {
         // Arrange.
         var sut = new ChromaMapper<Hotel<string>>(BuildModel<string>());
@@ -60,7 +62,33 @@ public class ChromaMapperTests
         var metadata = sut.MapFromDataToStorageModel(hotel, 0, generatedEmbeddings: null).Metadata!;
 
         // Assert.
-        Assert.False(metadata.ContainsKey("Tags"));
+        Assert.True(metadata.ContainsKey("Tags"));
+        Assert.Null(metadata["Tags"]);
+    }
+
+    [Fact]
+    public void WritesANullFullTextPropertyAsAnEmptyDocument()
+    {
+        // Arrange: Chroma keeps the old document for a null one, and replaces it with an empty one.
+        var sut = new ChromaMapper<FullTextHotel>(new ChromaModelBuilder().Build(typeof(FullTextHotel), typeof(string), definition: null, defaultEmbeddingGenerator: null));
+        var hotel = new FullTextHotel { HotelId = "h1", Description = null, Embedding = new float[] { 1, 2, 3, 4 } };
+
+        // Act.
+        var record = sut.MapFromDataToStorageModel(hotel, 0, generatedEmbeddings: null);
+
+        // Assert.
+        Assert.Equal("", record.Document);
+        Assert.Null(record.Metadata!["Description"]);
+    }
+
+    [Fact]
+    public void ReadsAnEmptyDocumentAsNull()
+    {
+        var sut = new ChromaMapper<FullTextHotel>(new ChromaModelBuilder().Build(typeof(FullTextHotel), typeof(string), definition: null, defaultEmbeddingGenerator: null));
+
+        var hotel = sut.MapFromStorageToDataModel("h1", embedding: null, metadata: null, document: "", includeVectors: false);
+
+        Assert.Null(hotel.Description);
     }
 
     [Fact]

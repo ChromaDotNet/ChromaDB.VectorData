@@ -31,13 +31,15 @@ internal sealed class ChromaMapper<TRecord>(CollectionModel model)
             ?? throw new InvalidOperationException($"Missing key property '{keyProperty.ModelName}' on provided record of type '{typeof(TRecord).Name}'.");
 
         // Chroma metadata has no null values, and Chroma drops empty lists: neither is stored, and both come back as null.
+        // An upsert of an existing record merges its metadata, so they go as an explicit null, which deletes the old value.
         Dictionary<string, object>? metadata = null;
         foreach (var property in model.DataProperties)
         {
-            if (ChromaFieldMapping.ToMetadataValue(property.GetValueAsObject(dataModel)) is { } value and not System.Collections.ICollection { Count: 0 })
-            {
-                (metadata ??= []).Add(property.StorageName, value);
-            }
+            (metadata ??= []).Add(
+                property.StorageName,
+                ChromaFieldMapping.ToMetadataValue(property.GetValueAsObject(dataModel)) is { } value and not System.Collections.ICollection { Count: 0 }
+                    ? value
+                    : null!);
         }
 
         // There is exactly one vector property, as verified by the model builder.
@@ -50,8 +52,9 @@ internal sealed class ChromaMapper<TRecord>(CollectionModel model)
                 ? model.VectorProperty.GetValueAsObject(dataModel)
                 : generatedEmbeddings[0]![recordIndex]);
 
-        // The full-text property stays in the metadata too, for the filters on it.
-        var document = _documentProperty?.GetValueAsObject(dataModel) as string;
+        // The full-text property stays in the metadata too, for the filters on it. Chroma keeps the old document for a null one,
+        // so a null text is an empty document, which reads back as null.
+        var document = _documentProperty is null ? null : _documentProperty.GetValueAsObject(dataModel) as string ?? string.Empty;
 
         return new ChromaStorageRecord(ChromaFieldMapping.ToId(key), embedding, metadata, document);
 
@@ -96,7 +99,7 @@ internal sealed class ChromaMapper<TRecord>(CollectionModel model)
             {
                 dataProperty.SetValueAsObject(outputRecord, ChromaFieldMapping.FromMetadataValue(value, dataProperty.Type));
             }
-            else if (dataProperty == _documentProperty && document is not null)
+            else if (dataProperty == _documentProperty && document is { Length: > 0 })
             {
                 // A record written by another Chroma client has its text in the document only.
                 dataProperty.SetValueAsObject(outputRecord, document);

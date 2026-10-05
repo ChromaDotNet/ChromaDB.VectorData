@@ -189,6 +189,32 @@ public class ChromaCollectionTests
         Assert.Equal(0.032, result.Score!.Value, precision: 6);
     }
 
+    [Theory]
+    [InlineData("Description")]
+    [InlineData("#document")]
+    public async Task UpsertDeletesTheSparseVectorOfANullTextAsync(string sourceKey)
+    {
+        // Arrange: the client computes no vector for a record without its text, and Chroma merges the metadata of an existing record.
+        using var sut = this.CreateHybridCollection<FullTextHotel>(Bm25Index("Description_bm25", sourceKey));
+        IReadOnlyList<IReadOnlyDictionary<string, object>>? metadatas = null;
+        this._collectionClientMock
+            .Setup(x => x.UpsertAsync(It.IsAny<IReadOnlyList<string>>(), It.IsAny<IReadOnlyList<ReadOnlyMemory<float>>>(), It.IsAny<IReadOnlyList<IReadOnlyDictionary<string, object>>?>(), It.IsAny<IReadOnlyList<string>?>(), this._testCancellationToken))
+            .Callback<IReadOnlyList<string>, IReadOnlyList<ReadOnlyMemory<float>>, IReadOnlyList<IReadOnlyDictionary<string, object>>?, IReadOnlyList<string>?, CancellationToken>((_, _, m, _, _) => metadatas = m)
+            .Returns(Task.CompletedTask);
+
+        // Act.
+        await sut.UpsertAsync(
+        [
+            new FullTextHotel { HotelId = "h1", Description = null, Embedding = new float[] { 1, 2, 3, 4 } },
+            new FullTextHotel { HotelId = "h2", Description = "A pool", Embedding = new float[] { 1, 2, 3, 4 } },
+        ], this._testCancellationToken);
+
+        // Assert: an explicit null deletes the old vector of the record without text; the client computes the other one.
+        Assert.True(metadatas![0].ContainsKey("Description_bm25"));
+        Assert.Null(metadatas[0]["Description_bm25"]);
+        Assert.False(metadatas[1].ContainsKey("Description_bm25"));
+    }
+
     [Fact]
     public async Task HybridSearchUsesABm25IndexOnTheDocumentsForTheDocumentPropertyAsync()
     {

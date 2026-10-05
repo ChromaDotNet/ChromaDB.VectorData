@@ -329,12 +329,47 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
 
         await RunOperationAsync(
             UpsertName,
-            () => RunOnCollectionAsync(collection => GetCollectionClient(collection).UpsertAsync(
-                ids,
-                embeddings,
-                hasMetadata ? metadatas : null,
-                _mapper.HasDocument ? documents : null,
-                cancellationToken), cancellationToken)).ConfigureAwait(false);
+            () => RunOnCollectionAsync(collection =>
+            {
+                if (hasMetadata)
+                {
+                    DeleteSparseVectorsOfNullTexts(collection, metadatas, documents);
+                }
+
+                return GetCollectionClient(collection).UpsertAsync(
+                    ids,
+                    embeddings,
+                    hasMetadata ? metadatas : null,
+                    _mapper.HasDocument ? documents : null,
+                    cancellationToken);
+            }, cancellationToken)).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The client computes the vectors of the sparse vector indexes, like the BM25 ones, from the text they come from, and none
+    /// for a record without the text. An upsert of an existing record merges its metadata, so a record whose text is now null
+    /// gets an explicit null for the vector, which deletes the old one: otherwise a search would still find its old words.
+    /// </summary>
+    private static void DeleteSparseVectorsOfNullTexts(ChromaCollection collection, List<Dictionary<string, object>> metadatas, List<string> documents)
+    {
+        foreach (var index in collection.SparseVectorIndexes)
+        {
+            if (index.SourceKey is not { } sourceKey)
+            {
+                continue;
+            }
+
+            for (var i = 0; i < metadatas.Count; i++)
+            {
+                var hasNoText = sourceKey == ChromaSearchKeys.Document
+                    ? i < documents.Count && documents[i] is null or { Length: 0 }
+                    : metadatas[i].TryGetValue(sourceKey, out var text) && text is null;
+                if (hasNoText)
+                {
+                    metadatas[i][index.Key] = null!;
+                }
+            }
+        }
     }
 
     #region Search

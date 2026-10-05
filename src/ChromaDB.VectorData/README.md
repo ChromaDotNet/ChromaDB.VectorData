@@ -108,12 +108,12 @@ var results = collection.HybridSearchAsync(new float[] { 0.1f, 0.2f, 0.3f, 0.4f 
 - An existing collection must use the space of the distance function, as a collection created by another Chroma client without a space uses l2: otherwise the provider throws, rather than turning the distances of another space into scores.
 - Filters: `==` and `!=`, `<`, `<=`, `>` and `>=` on numbers, `&&`, `||`, `!`, `Contains` over an inline list or an array property, and `Any` with `Contains` over an inline list.
 - Filters on the key: `==` and `Contains` over a list of keys, joined to the other conditions with `&&`; Chroma looks the records up by id.
-- Full-text: the only full-text indexed `string` property is also stored as the Chroma document, where other Chroma clients store their text. `Contains` and `!Contains` on it filter the text with `where_document`, joined to the other conditions with `&&`, and a record that has its text in the document only reads it into that property.
+- Full-text: the only full-text indexed `string` property is also stored as the Chroma document, where other Chroma clients store their text. `Contains` and `!Contains` on it filter the text with `where_document`, joined to the other conditions with `&&`, and a record that has its text in the document only reads it into that property. A null text is stored as an empty document, which reads back as null, since Chroma keeps the old document for a null one.
 - NativeAOT and trimming: the dynamic collection, from `GetDynamicCollection` with a `VectorStoreCollectionDefinition`, works without reflection; `ChromaCollection<TKey, TRecord>` maps the properties of the record type by reflection. The `AddChroma…` registration methods are marked as incompatible with trimming and NativeAOT: there, register the vector store yourself, like `services.AddSingleton<VectorStore>(sp => new ChromaVectorStore(sp.GetRequiredService<ChromaClient>()));`.
 
 ## Limitations
 
-- Chroma metadata has no null values: a null property is not stored, and filtering on null is not supported.
+- Chroma metadata has no null values: a null property is not stored, and filtering on null is not supported. Upserting a record that exists replaces it: a value that is now null, or an empty list, is deleted.
 - Chroma does not store empty lists: an empty array or list is not stored, and comes back as null.
 - `GetAsync` with a filter does not support ordering.
 - Comparisons work on numbers only.
