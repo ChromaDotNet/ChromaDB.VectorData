@@ -3,6 +3,7 @@
 
 using System;
 using System.Linq;
+using System.Text.Json.Nodes;
 using ChromaDB.Client;
 using Microsoft.Extensions.VectorData;
 using Microsoft.Extensions.VectorData.ProviderServices;
@@ -68,8 +69,13 @@ public class ChromaCollectionCreateMappingTests
         // Act.
         var definition = ChromaCollectionCreateMapping.MapCollectionDefinition("hotels", model.VectorProperty, ChromaCollectionCreateMapping.GetBm25Properties(model));
 
-        // Assert.
-        Assert.NotNull(definition.Schema);
+        // Assert: an index on each property, from its text, with the BM25 function of Chroma; the client adds the space.
+        var expected =
+            """{"defaults":{},"keys":{"Description_bm25":"""
+            + """{"sparse_vector":{"sparse_vector_index":{"enabled":true,"config":{"source_key":"Description","bm25":true,"embedding_function":{"type":"known","name":"chroma_bm25","config":{"k":1.2,"b":0.75,"avg_doc_length":256,"token_max_length":40,"include_tokens":false}}}}}},"Review_bm25":"""
+            + """{"sparse_vector":{"sparse_vector_index":{"enabled":true,"config":{"source_key":"Review","bm25":true,"embedding_function":{"type":"known","name":"chroma_bm25","config":{"k":1.2,"b":0.75,"avg_doc_length":256,"token_max_length":40,"include_tokens":false}}}}}}}}""";
+        var actual = definition.Schema!.ToString();
+        Assert.True(JsonNode.DeepEquals(JsonNode.Parse(expected), JsonNode.Parse(actual)), actual);
     }
 
     [Fact]
