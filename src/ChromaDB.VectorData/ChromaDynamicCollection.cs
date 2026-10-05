@@ -21,7 +21,7 @@ public sealed class ChromaDynamicCollection : ChromaCollection<object, Dictionar
     /// <param name="ownsClient">A value indicating whether <paramref name="httpClient"/> is disposed when the collection is disposed.</param>
     /// <param name="options">Optional configuration options for this class.</param>
     public ChromaDynamicCollection(ChromaConfigurationOptions chromaOptions, HttpClient httpClient, string name, bool ownsClient, ChromaCollectionOptions options)
-        : this(() => new MockableChromaClient(chromaOptions, httpClient, ownsClient), name, options)
+        : this(() => new SharedChromaClient(chromaOptions, httpClient, ownsClient), name, options)
     {
     }
 
@@ -32,11 +32,11 @@ public sealed class ChromaDynamicCollection : ChromaCollection<object, Dictionar
     /// <param name="name">The name of the collection.</param>
     /// <param name="options">Optional configuration options for this class.</param>
     public ChromaDynamicCollection(ChromaClient chromaClient, string name, ChromaCollectionOptions options)
-        : this(() => new MockableChromaClient(chromaClient), name, options)
+        : this(() => new SharedChromaClient(chromaClient), name, options)
     {
     }
 
-    internal ChromaDynamicCollection(Func<MockableChromaClient> clientFactory, string name, ChromaCollectionOptions options)
+    internal ChromaDynamicCollection(Func<SharedChromaClient> clientFactory, string name, ChromaCollectionOptions options)
         : base(
             clientFactory,
             name,

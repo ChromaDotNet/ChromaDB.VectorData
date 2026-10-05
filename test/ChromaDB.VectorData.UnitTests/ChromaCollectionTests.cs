@@ -24,14 +24,25 @@ public class ChromaCollectionTests
 
     private static readonly Guid s_guidTestRecordKey = Guid.Parse("11111111-1111-1111-1111-111111111111");
 
-    private readonly Mock<MockableChromaClient> _chromaClientMock = new(MockBehavior.Strict);
+    private readonly Mock<ChromaClient> _chromaClientMock = new(MockBehavior.Strict);
+    private readonly Mock<ChromaCollectionClient> _collectionClientMock = new(MockBehavior.Strict);
     private readonly ChromaCollection _chromaCollection = new(TestCollectionName) { Id = Guid.NewGuid() };
     private readonly CancellationToken _testCancellationToken = new(false);
 
     public ChromaCollectionTests()
     {
+        // The collection reads metadata exactly with a client of its own: here the same mock.
         this._chromaClientMock
-            .Setup(x => x.GetCollectionAsync(TestCollectionName, this._testCancellationToken))
+            .Setup(x => x.WithMetadataValues(ChromaMetadataValues.Exact))
+            .Returns(this._chromaClientMock.Object);
+        this._chromaClientMock
+            .Setup(x => x.Options)
+            .Returns(new ChromaConfigurationOptions("http://localhost:8000"));
+        this._chromaClientMock
+            .Setup(x => x.GetCollectionClient(It.IsAny<ChromaCollection>()))
+            .Returns(this._collectionClientMock.Object);
+        this._chromaClientMock
+            .Setup(x => x.GetCollectionAsync(TestCollectionName, null, null, this._testCancellationToken))
             .ReturnsAsync(this._chromaCollection);
     }
 
@@ -43,7 +54,7 @@ public class ChromaCollectionTests
         // Arrange.
         using var sut = this.CreateCollection<string, Hotel<string>>();
         this._chromaClientMock
-            .Setup(x => x.CollectionExistsAsync(TestCollectionName, this._testCancellationToken))
+            .Setup(x => x.CollectionExistsAsync(TestCollectionName, null, null, this._testCancellationToken))
             .ReturnsAsync(expectedExists);
 
         // Act and assert.
@@ -57,8 +68,8 @@ public class ChromaCollectionTests
         using var sut = this.CreateCollection<string, DotProductHotel>();
         ChromaCollectionDefinition? definition = null;
         this._chromaClientMock
-            .Setup(x => x.GetOrCreateCollectionAsync(It.IsAny<ChromaCollectionDefinition>(), this._testCancellationToken))
-            .Callback<ChromaCollectionDefinition, CancellationToken>((d, _) => definition = d)
+            .Setup(x => x.GetOrCreateCollectionAsync(It.IsAny<ChromaCollectionDefinition>(), null, null, this._testCancellationToken))
+            .Callback<ChromaCollectionDefinition, string?, string?, CancellationToken>((d, _, _, _) => definition = d)
             .ReturnsAsync(this._chromaCollection);
 
         // Act.
@@ -75,14 +86,14 @@ public class ChromaCollectionTests
         // Arrange.
         using var sut = this.CreateCollection<string, FullTextHotel>();
         this._chromaClientMock
-            .Setup(x => x.GetOrCreateCollectionAsync(It.IsAny<ChromaCollectionDefinition>(), this._testCancellationToken))
+            .Setup(x => x.GetOrCreateCollectionAsync(It.IsAny<ChromaCollectionDefinition>(), null, null, this._testCancellationToken))
             .ReturnsAsync(this._chromaCollection);
 
         // Act.
         await sut.EnsureCollectionExistsAsync(this._testCancellationToken);
 
         // Assert.
-        this._chromaClientMock.Verify(x => x.GetOrCreateCollectionAsync(It.IsAny<ChromaCollectionDefinition>(), this._testCancellationToken), Times.Once);
+        this._chromaClientMock.Verify(x => x.GetOrCreateCollectionAsync(It.IsAny<ChromaCollectionDefinition>(), null, null, this._testCancellationToken), Times.Once);
     }
 
     [Theory]
@@ -91,11 +102,11 @@ public class ChromaCollectionTests
     public async Task EnsureCollectionExistsCreatesTheBm25IndexesOnlyWithTheOptionAsync(bool createBm25Indexes)
     {
         // Arrange.
-        using var sut = new ChromaCollection<string, FullTextHotel>(() => this._chromaClientMock.Object, TestCollectionName, new ChromaCollectionOptions { CreateBm25Indexes = createBm25Indexes });
+        using var sut = new ChromaCollection<string, FullTextHotel>(this._chromaClientMock.Object, TestCollectionName, new ChromaCollectionOptions { CreateBm25Indexes = createBm25Indexes });
         ChromaCollectionDefinition? definition = null;
         this._chromaClientMock
-            .Setup(x => x.GetOrCreateCollectionAsync(It.IsAny<ChromaCollectionDefinition>(), this._testCancellationToken))
-            .Callback<ChromaCollectionDefinition, CancellationToken>((d, _) => definition = d)
+            .Setup(x => x.GetOrCreateCollectionAsync(It.IsAny<ChromaCollectionDefinition>(), null, null, this._testCancellationToken))
+            .Callback<ChromaCollectionDefinition, string?, string?, CancellationToken>((d, _, _, _) => definition = d)
             .ReturnsAsync(this._chromaCollection);
 
         // Act.
@@ -108,7 +119,7 @@ public class ChromaCollectionTests
     [Fact]
     public void ThrowsWhenAPropertyUsesTheKeyOfABm25Index()
     {
-        var exception = Assert.Throws<ArgumentException>(() => new ChromaCollection<string, Bm25KeyClashHotel>(() => this._chromaClientMock.Object, TestCollectionName, new ChromaCollectionOptions { CreateBm25Indexes = true }));
+        var exception = Assert.Throws<ArgumentException>(() => new ChromaCollection<string, Bm25KeyClashHotel>(this._chromaClientMock.Object, TestCollectionName, new ChromaCollectionOptions { CreateBm25Indexes = true }));
 
         Assert.Contains("'Description_bm25'", exception.Message);
         Assert.Contains("'Other'", exception.Message);
@@ -117,7 +128,7 @@ public class ChromaCollectionTests
     [Fact]
     public void AcceptsAPropertyWithTheKeyOfABm25IndexWithoutTheOption()
     {
-        using var sut = new ChromaCollection<string, Bm25KeyClashHotel>(() => this._chromaClientMock.Object, TestCollectionName, null);
+        using var sut = new ChromaCollection<string, Bm25KeyClashHotel>(this._chromaClientMock.Object, TestCollectionName, null);
     }
 
     [Fact]
@@ -126,9 +137,9 @@ public class ChromaCollectionTests
         // Arrange: the collection has the BM25 index the provider creates.
         using var sut = this.CreateHybridCollection<FullTextHotel>(Bm25Index("Description_bm25", "Description"));
         ChromaSearch? search = null;
-        this._chromaClientMock
-            .Setup(x => x.SearchAsync(It.Is<ChromaCollection>(c => c.Name == "hybridcollection"), It.IsAny<ChromaSearch>(), this._testCancellationToken))
-            .Callback<ChromaCollection, ChromaSearch, CancellationToken>((_, s, _) => search = s)
+        this._collectionClientMock
+            .Setup(x => x.SearchAsync(It.IsAny<ChromaSearch>(), null, this._testCancellationToken))
+            .Callback<ChromaSearch, ChromaReadLevel?, CancellationToken>((s, _, _) => search = s)
             .ReturnsAsync(
             [
                 new ChromaSearchEntry("h1") { Score = -0.032f, Document = "A pool and a spa", Metadata = new Dictionary<string, object> { ["Description"] = "A pool and a spa", ["Rating"] = 5L } },
@@ -164,9 +175,9 @@ public class ChromaCollectionTests
         // Arrange: a collection created by the Python client of Chroma, with the index on the documents.
         using var sut = this.CreateHybridCollection<FullTextHotel>(Bm25Index("sparse_embedding", "#document"));
         ChromaSearch? search = null;
-        this._chromaClientMock
-            .Setup(x => x.SearchAsync(It.IsAny<ChromaCollection>(), It.IsAny<ChromaSearch>(), this._testCancellationToken))
-            .Callback<ChromaCollection, ChromaSearch, CancellationToken>((_, s, _) => search = s)
+        this._collectionClientMock
+            .Setup(x => x.SearchAsync(It.IsAny<ChromaSearch>(), null, this._testCancellationToken))
+            .Callback<ChromaSearch, ChromaReadLevel?, CancellationToken>((s, _, _) => search = s)
             .ReturnsAsync([]);
 
         // Act.
@@ -182,9 +193,9 @@ public class ChromaCollectionTests
         // Arrange.
         using var sut = this.CreateHybridCollection<TwoFullTextHotel>(Bm25Index("Description_bm25", "Description"), Bm25Index("Review_bm25", "Review"));
         ChromaSearch? search = null;
-        this._chromaClientMock
-            .Setup(x => x.SearchAsync(It.IsAny<ChromaCollection>(), It.IsAny<ChromaSearch>(), this._testCancellationToken))
-            .Callback<ChromaCollection, ChromaSearch, CancellationToken>((_, s, _) => search = s)
+        this._collectionClientMock
+            .Setup(x => x.SearchAsync(It.IsAny<ChromaSearch>(), null, this._testCancellationToken))
+            .Callback<ChromaSearch, ChromaReadLevel?, CancellationToken>((s, _, _) => search = s)
             .ReturnsAsync([]);
 
         // Act.
@@ -242,12 +253,12 @@ public class ChromaCollectionTests
     {
         // Arrange.
         using var sut = this.CreateCollection<Guid, Hotel<Guid>>();
-        List<string>? ids = null;
-        List<ReadOnlyMemory<float>>? embeddings = null;
-        List<Dictionary<string, object>>? metadatas = null;
-        this._chromaClientMock
-            .Setup(x => x.UpsertAsync(this._chromaCollection, It.IsAny<List<string>>(), It.IsAny<List<ReadOnlyMemory<float>>>(), It.IsAny<List<Dictionary<string, object>>?>(), It.IsAny<List<string>?>(), this._testCancellationToken))
-            .Callback<ChromaCollection, List<string>, List<ReadOnlyMemory<float>>, List<Dictionary<string, object>>?, List<string>?, CancellationToken>((_, i, e, m, _, _) => (ids, embeddings, metadatas) = (i, e, m))
+        IReadOnlyList<string>? ids = null;
+        IReadOnlyList<ReadOnlyMemory<float>>? embeddings = null;
+        IReadOnlyList<IReadOnlyDictionary<string, object>>? metadatas = null;
+        this._collectionClientMock
+            .Setup(x => x.UpsertAsync(It.IsAny<IReadOnlyList<string>>(), It.IsAny<IReadOnlyList<ReadOnlyMemory<float>>>(), It.IsAny<IReadOnlyList<IReadOnlyDictionary<string, object>>?>(), It.IsAny<IReadOnlyList<string>?>(), this._testCancellationToken))
+            .Callback<IReadOnlyList<string>, IReadOnlyList<ReadOnlyMemory<float>>, IReadOnlyList<IReadOnlyDictionary<string, object>>?, IReadOnlyList<string>?, CancellationToken>((i, e, m, _, _) => (ids, embeddings, metadatas) = (i, e, m))
             .Returns(Task.CompletedTask);
 
         // Act.
@@ -264,8 +275,8 @@ public class ChromaCollectionTests
     {
         // Arrange.
         using var sut = this.CreateCollection<string, Hotel<string>>();
-        this._chromaClientMock
-            .Setup(x => x.GetAsync(this._chromaCollection, new List<string> { "h1" }, null, null, null, null, ChromaGetInclude.Metadatas, this._testCancellationToken))
+        this._collectionClientMock
+            .Setup(x => x.GetAsync(new List<string> { "h1" }, null, null, null, null, ChromaGetInclude.Metadatas, this._testCancellationToken))
             .ReturnsAsync([new ChromaCollectionEntry("h1") { Metadata = new Dictionary<string, object> { ["HotelName"] = "Grand" } }]);
 
         // Act.
@@ -281,15 +292,15 @@ public class ChromaCollectionTests
     {
         // Arrange.
         using var sut = this.CreateCollection<string, Hotel<string>>();
-        this._chromaClientMock
-            .Setup(x => x.DeleteAsync(this._chromaCollection, new List<string> { "h1", "h2" }, this._testCancellationToken))
+        this._collectionClientMock
+            .Setup(x => x.DeleteAsync(new List<string> { "h1", "h2" }, null, null, this._testCancellationToken))
             .Returns(Task.CompletedTask);
 
         // Act.
         await sut.DeleteAsync(["h1", "h2"], this._testCancellationToken);
 
         // Assert.
-        this._chromaClientMock.Verify(x => x.DeleteAsync(this._chromaCollection, new List<string> { "h1", "h2" }, this._testCancellationToken), Times.Once);
+        this._collectionClientMock.Verify(x => x.DeleteAsync(new List<string> { "h1", "h2" }, null, null, this._testCancellationToken), Times.Once);
     }
 
     [Fact]
@@ -297,8 +308,8 @@ public class ChromaCollectionTests
     {
         // Arrange.
         using var sut = this.CreateCollection<string, Hotel<string>>();
-        this._chromaClientMock
-            .Setup(x => x.QueryAsync(this._chromaCollection, It.IsAny<ReadOnlyMemory<float>>(), 3, null, null, null, ChromaQueryInclude.Metadatas | ChromaQueryInclude.Distances, this._testCancellationToken))
+        this._collectionClientMock
+            .Setup(x => x.QueryAsync(It.IsAny<ReadOnlyMemory<float>>(), 3, null, null, ChromaQueryInclude.Metadatas | ChromaQueryInclude.Distances, null, this._testCancellationToken))
             .ReturnsAsync(
             [
                 new ChromaCollectionQueryEntry("skipped") { Distance = 0.1f },
@@ -320,15 +331,14 @@ public class ChromaCollectionTests
     {
         // Arrange.
         using var sut = this.CreateCollection<string, Hotel<string>>();
-        this._chromaClientMock
+        this._collectionClientMock
             .Setup(x => x.QueryAsync(
-                this._chromaCollection,
                 It.IsAny<ReadOnlyMemory<float>>(),
                 2,
                 null,
                 null,
-                It.Is<List<string>>(ids => ids.SequenceEqual(new[] { "h1", "h2" })),
                 ChromaQueryInclude.Metadatas | ChromaQueryInclude.Distances,
+                It.Is<IReadOnlyList<string>>(ids => ids.SequenceEqual(new[] { "h1", "h2" })),
                 this._testCancellationToken))
             .ReturnsAsync([new ChromaCollectionQueryEntry("h1") { Distance = 0.1f }]);
 
@@ -344,10 +354,9 @@ public class ChromaCollectionTests
     {
         // Arrange.
         using var sut = this.CreateCollection<string, Hotel<string>>();
-        this._chromaClientMock
+        this._collectionClientMock
             .Setup(x => x.GetAsync(
-                this._chromaCollection,
-                It.Is<List<string>>(ids => ids.SequenceEqual(new[] { "h1" })),
+                It.Is<IReadOnlyList<string>>(ids => ids.SequenceEqual(new[] { "h1" })),
                 It.IsNotNull<ChromaWhereOperator>(),
                 null,
                 5,
@@ -395,7 +404,7 @@ public class ChromaCollectionTests
         // Arrange: a collection created elsewhere with the default space of Chroma, l2, and a model with cosine.
         using var sut = this.CreateCollection<string, Hotel<string>>();
         this._chromaClientMock
-            .Setup(x => x.GetOrCreateCollectionAsync(It.IsAny<ChromaCollectionDefinition>(), this._testCancellationToken))
+            .Setup(x => x.GetOrCreateCollectionAsync(It.IsAny<ChromaCollectionDefinition>(), null, null, this._testCancellationToken))
             .ReturnsAsync(new ChromaCollection(TestCollectionName) { Id = Guid.NewGuid(), Metadata = new Dictionary<string, object> { ["hnsw:space"] = "l2" } });
 
         // Act and assert.
@@ -408,9 +417,9 @@ public class ChromaCollectionTests
     public async Task SearchThrowsForAnExistingCollectionWithAnotherSpaceAsync()
     {
         // Arrange: the model uses the dot product, the collection cosine.
-        using var sut = new ChromaCollection<string, DotProductHotel>(() => this._chromaClientMock.Object, "othercollection", null);
+        using var sut = new ChromaCollection<string, DotProductHotel>(this._chromaClientMock.Object, "othercollection", null);
         this._chromaClientMock
-            .Setup(x => x.GetCollectionAsync("othercollection", this._testCancellationToken))
+            .Setup(x => x.GetCollectionAsync("othercollection", null, null, this._testCancellationToken))
             .ReturnsAsync(new ChromaCollection("othercollection") { Id = Guid.NewGuid(), Metadata = new Dictionary<string, object> { ["hnsw:space"] = "cosine" } });
 
         // Act and assert.
@@ -423,7 +432,7 @@ public class ChromaCollectionTests
         // Arrange.
         using var sut = this.CreateCollection<string, DotProductHotel>();
         this._chromaClientMock
-            .Setup(x => x.GetOrCreateCollectionAsync(It.IsAny<ChromaCollectionDefinition>(), this._testCancellationToken))
+            .Setup(x => x.GetOrCreateCollectionAsync(It.IsAny<ChromaCollectionDefinition>(), null, null, this._testCancellationToken))
             .ReturnsAsync(new ChromaCollection(TestCollectionName) { Id = Guid.NewGuid(), Metadata = new Dictionary<string, object> { ["hnsw:space"] = "ip" } });
 
         // Act.
@@ -435,19 +444,23 @@ public class ChromaCollectionTests
     {
         // Arrange: the collection was deleted and created again elsewhere, so it has a new id.
         var recreatedCollection = new ChromaCollection(TestCollectionName) { Id = Guid.NewGuid() };
-        using var sut = new ChromaCollection<string, Hotel<string>>(() => this._chromaClientMock.Object, "recreatedcollection", null);
+        using var sut = new ChromaCollection<string, Hotel<string>>(this._chromaClientMock.Object, "recreatedcollection", null);
+        var recreatedCollectionClientMock = new Mock<ChromaCollectionClient>(MockBehavior.Strict);
         this._chromaClientMock
-            .SetupSequence(x => x.GetCollectionAsync("recreatedcollection", this._testCancellationToken))
+            .SetupSequence(x => x.GetCollectionAsync("recreatedcollection", null, null, this._testCancellationToken))
             .ReturnsAsync(this._chromaCollection)
             .ReturnsAsync(recreatedCollection);
         this._chromaClientMock
-            .Setup(x => x.DeleteAsync(this._chromaCollection, It.IsAny<List<string>>(), this._testCancellationToken))
+            .Setup(x => x.GetCollectionClient(recreatedCollection))
+            .Returns(recreatedCollectionClientMock.Object);
+        this._collectionClientMock
+            .Setup(x => x.DeleteAsync(It.IsAny<IReadOnlyList<string>>(), null, null, this._testCancellationToken))
             .Returns(Task.CompletedTask);
-        this._chromaClientMock
-            .Setup(x => x.GetAsync(this._chromaCollection, It.IsAny<List<string>>(), null, null, null, null, ChromaGetInclude.Metadatas, this._testCancellationToken))
+        this._collectionClientMock
+            .Setup(x => x.GetAsync(It.IsAny<IReadOnlyList<string>>(), null, null, null, null, ChromaGetInclude.Metadatas, this._testCancellationToken))
             .ThrowsAsync(new ChromaException("Collection does not exist.") { StatusCode = System.Net.HttpStatusCode.NotFound, ErrorType = "NotFoundError" });
-        this._chromaClientMock
-            .Setup(x => x.GetAsync(recreatedCollection, It.IsAny<List<string>>(), null, null, null, null, ChromaGetInclude.Metadatas, this._testCancellationToken))
+        recreatedCollectionClientMock
+            .Setup(x => x.GetAsync(It.IsAny<IReadOnlyList<string>>(), null, null, null, null, ChromaGetInclude.Metadatas, this._testCancellationToken))
             .ReturnsAsync([new ChromaCollectionEntry("h1")]);
 
         // Act: the delete keeps the id, the get finds that it no longer exists.
@@ -456,21 +469,21 @@ public class ChromaCollectionTests
 
         // Assert.
         Assert.Equal("h1", record?.HotelId);
-        this._chromaClientMock.Verify(x => x.GetCollectionAsync("recreatedcollection", this._testCancellationToken), Times.Exactly(2));
+        this._chromaClientMock.Verify(x => x.GetCollectionAsync("recreatedcollection", null, null, this._testCancellationToken), Times.Exactly(2));
     }
 
     [Fact]
     public async Task ThrowsWhenTheCollectionIsMissingOnTheFirstLookupAsync()
     {
         // Arrange: without a kept id there is nothing to look up again.
-        using var sut = new ChromaCollection<string, Hotel<string>>(() => this._chromaClientMock.Object, "missingcollection", null);
+        using var sut = new ChromaCollection<string, Hotel<string>>(this._chromaClientMock.Object, "missingcollection", null);
         this._chromaClientMock
-            .Setup(x => x.GetCollectionAsync("missingcollection", this._testCancellationToken))
+            .Setup(x => x.GetCollectionAsync("missingcollection", null, null, this._testCancellationToken))
             .ThrowsAsync(new ChromaException("Collection does not exist.") { StatusCode = System.Net.HttpStatusCode.NotFound, ErrorType = "NotFoundError" });
 
         // Act and assert.
         await Assert.ThrowsAsync<VectorStoreException>(() => sut.GetAsync("h1", cancellationToken: this._testCancellationToken));
-        this._chromaClientMock.Verify(x => x.GetCollectionAsync("missingcollection", this._testCancellationToken), Times.Once);
+        this._chromaClientMock.Verify(x => x.GetCollectionAsync("missingcollection", null, null, this._testCancellationToken), Times.Once);
     }
 
     [Fact]
@@ -490,7 +503,7 @@ public class ChromaCollectionTests
         // Arrange.
         using var sut = this.CreateCollection<string, Hotel<string>>();
         this._chromaClientMock
-            .Setup(x => x.CollectionExistsAsync(TestCollectionName, this._testCancellationToken))
+            .Setup(x => x.CollectionExistsAsync(TestCollectionName, null, null, this._testCancellationToken))
             .ThrowsAsync(new ChromaException("Unexpected status code"));
 
         // Act.
@@ -503,23 +516,23 @@ public class ChromaCollectionTests
 
     [Fact]
     public void RejectsUnsupportedKeyTypes()
-        => Assert.Throws<NotSupportedException>(() => new ChromaCollection<int, Hotel<int>>(() => this._chromaClientMock.Object, TestCollectionName));
+        => Assert.Throws<NotSupportedException>(() => new ChromaCollection<int, Hotel<int>>(this._chromaClientMock.Object, TestCollectionName));
 
 #pragma warning disable IL2026, IL3050 // The test models are not trimmed
     private ChromaCollection<TKey, TRecord> CreateCollection<TKey, TRecord>()
         where TKey : notnull
         where TRecord : class
-        => new(() => this._chromaClientMock.Object, TestCollectionName);
+        => new(this._chromaClientMock.Object, TestCollectionName);
 
     private ChromaCollection<string, TRecord> CreateHybridCollection<TRecord>(params string[] indexes)
         where TRecord : class
     {
         var schema = JsonDocument.Parse("{\"keys\":{" + string.Join(",", indexes) + "}}").RootElement.Clone();
         this._chromaClientMock
-            .Setup(x => x.GetCollectionAsync("hybridcollection", this._testCancellationToken))
+            .Setup(x => x.GetCollectionAsync("hybridcollection", null, null, this._testCancellationToken))
             .ReturnsAsync(new ChromaCollection("hybridcollection") { Id = Guid.NewGuid(), SchemaJson = schema });
 
-        return new(() => this._chromaClientMock.Object, "hybridcollection", null);
+        return new(this._chromaClientMock.Object, "hybridcollection", null);
     }
 #pragma warning restore IL2026, IL3050
 

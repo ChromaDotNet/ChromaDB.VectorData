@@ -4,6 +4,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using ChromaDB.Client;
+using ChromaDB.Client.Models;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.VectorData;
 using Microsoft.Extensions.VectorData.ProviderServices;
@@ -23,7 +24,7 @@ public sealed class ChromaVectorStore : VectorStore
     private readonly VectorStoreMetadata _metadata;
 
     /// <summary>Chroma client that can be used to manage the collections and records in a Chroma store.</summary>
-    private readonly MockableChromaClient _chromaClient;
+    private readonly SharedChromaClient _chromaClient;
 
     /// <summary>A general purpose definition that can be used to construct a collection when needing to proxy schema agnostic operations.</summary>
     private static readonly VectorStoreCollectionDefinition s_generalPurposeDefinition = new() { Properties = [new VectorStoreKeyProperty("Key", typeof(string)), new VectorStoreVectorProperty("Vector", typeof(ReadOnlyMemory<float>), 1)] };
@@ -40,7 +41,7 @@ public sealed class ChromaVectorStore : VectorStore
     /// <param name="ownsClient">A value indicating whether <paramref name="httpClient"/> is disposed after the vector store is disposed.</param>
     /// <param name="options">Optional configuration options for this class.</param>
     public ChromaVectorStore(ChromaConfigurationOptions chromaOptions, HttpClient httpClient, bool ownsClient, ChromaVectorStoreOptions? options = default)
-        : this(new MockableChromaClient(chromaOptions, httpClient, ownsClient), options)
+        : this(new SharedChromaClient(chromaOptions, httpClient, ownsClient), options)
     {
     }
 
@@ -50,7 +51,7 @@ public sealed class ChromaVectorStore : VectorStore
     /// <param name="chromaClient">The Chroma client, for example from the dependency injection container. The vector store does not dispose it.</param>
     /// <param name="options">Optional configuration options for this class.</param>
     public ChromaVectorStore(ChromaClient chromaClient, ChromaVectorStoreOptions? options = default)
-        : this(new MockableChromaClient(chromaClient), options)
+        : this(new SharedChromaClient(chromaClient), options)
     {
     }
 
@@ -59,7 +60,7 @@ public sealed class ChromaVectorStore : VectorStore
     /// </summary>
     /// <param name="chromaClient">Chroma client that can be used to manage the collections and records in a Chroma store.</param>
     /// <param name="options">Optional configuration options for this class.</param>
-    internal ChromaVectorStore(MockableChromaClient chromaClient, ChromaVectorStoreOptions? options = default)
+    internal ChromaVectorStore(SharedChromaClient chromaClient, ChromaVectorStoreOptions? options = default)
     {
         Throw.IfNull(chromaClient);
 
@@ -118,17 +119,17 @@ public sealed class ChromaVectorStore : VectorStore
     /// <inheritdoc />
     public override async IAsyncEnumerable<string> ListCollectionNamesAsync([EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var collections = await VectorStoreErrorHandler.RunOperationAsync<IReadOnlyList<string>, HttpRequestException>(
+        var collections = await VectorStoreErrorHandler.RunOperationAsync<IReadOnlyList<ChromaCollection>, HttpRequestException>(
             _metadata,
             "ListCollections",
-            () => VectorStoreErrorHandler.RunOperationAsync<IReadOnlyList<string>, ChromaException>(
+            () => VectorStoreErrorHandler.RunOperationAsync<IReadOnlyList<ChromaCollection>, ChromaException>(
                 _metadata,
                 "ListCollections",
-                () => _chromaClient.ListCollectionsAsync(cancellationToken))).ConfigureAwait(false);
+                () => _chromaClient.Client.ListCollectionsAsync(cancellationToken: cancellationToken))).ConfigureAwait(false);
 
         foreach (var collection in collections)
         {
-            yield return collection;
+            yield return collection.Name;
         }
     }
 
@@ -154,7 +155,7 @@ public sealed class ChromaVectorStore : VectorStore
         return
             serviceKey is not null ? null :
             serviceType == typeof(VectorStoreMetadata) ? _metadata :
-            serviceType == typeof(ChromaClient) ? _chromaClient.ChromaClient :
+            serviceType == typeof(ChromaClient) ? _chromaClient.Client :
             serviceType.IsInstanceOfType(this) ? this :
             null;
     }

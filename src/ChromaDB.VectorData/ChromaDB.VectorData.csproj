@@ -31,7 +31,6 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="ChromaDB.VectorData.UnitTests" />
-    <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
   </ItemGroup>
 
 </Project>

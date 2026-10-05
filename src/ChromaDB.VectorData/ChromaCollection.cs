@@ -44,7 +44,7 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
     private const string DeleteName = "Delete";
 
     /// <summary>Chroma client that can be used to manage the collections and records in a Chroma store.</summary>
-    private readonly MockableChromaClient _chromaClient;
+    private readonly SharedChromaClient _chromaClient;
 
     /// <summary>The model for this collection.</summary>
     private readonly CollectionModel _model;
@@ -71,7 +71,7 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
     [RequiresDynamicCode("This constructor is incompatible with NativeAOT. For dynamic mapping via Dictionary<string, object?>, instantiate ChromaDynamicCollection instead.")]
     [RequiresUnreferencedCode("This constructor is incompatible with trimming. For dynamic mapping via Dictionary<string, object?>, instantiate ChromaDynamicCollection instead")]
     public ChromaCollection(ChromaConfigurationOptions chromaOptions, HttpClient httpClient, string name, bool ownsClient, ChromaCollectionOptions? options = null)
-        : this(() => new MockableChromaClient(chromaOptions, httpClient, ownsClient), name, options)
+        : this(() => new SharedChromaClient(chromaOptions, httpClient, ownsClient), name, options)
     {
     }
 
@@ -86,7 +86,7 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
     [RequiresDynamicCode("This constructor is incompatible with NativeAOT. For dynamic mapping via Dictionary<string, object?>, instantiate ChromaDynamicCollection instead.")]
     [RequiresUnreferencedCode("This constructor is incompatible with trimming. For dynamic mapping via Dictionary<string, object?>, instantiate ChromaDynamicCollection instead")]
     public ChromaCollection(ChromaClient chromaClient, string name, ChromaCollectionOptions? options = null)
-        : this(() => new MockableChromaClient(chromaClient), name, options)
+        : this(() => new SharedChromaClient(chromaClient), name, options)
     {
     }
 
@@ -100,7 +100,7 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
     /// <exception cref="ArgumentException">Thrown for any misconfigured options.</exception>
     [RequiresDynamicCode("This constructor is incompatible with NativeAOT. For dynamic mapping via Dictionary<string, object?>, instantiate ChromaDynamicCollection instead.")]
     [RequiresUnreferencedCode("This constructor is incompatible with trimming. For dynamic mapping via Dictionary<string, object?>, instantiate ChromaDynamicCollection instead")]
-    internal ChromaCollection(Func<MockableChromaClient> clientFactory, string name, ChromaCollectionOptions? options = null)
+    internal ChromaCollection(Func<SharedChromaClient> clientFactory, string name, ChromaCollectionOptions? options = null)
         : this(
             clientFactory,
             name,
@@ -111,7 +111,7 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
     {
     }
 
-    internal ChromaCollection(Func<MockableChromaClient> clientFactory, string name, Func<ChromaCollectionOptions, CollectionModel> modelFactory, ChromaCollectionOptions? options)
+    internal ChromaCollection(Func<SharedChromaClient> clientFactory, string name, Func<ChromaCollectionOptions, CollectionModel> modelFactory, ChromaCollectionOptions? options)
     {
         // Verify.
         Throw.IfNull(clientFactory);
@@ -167,7 +167,7 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
     public override Task<bool> CollectionExistsAsync(CancellationToken cancellationToken = default)
         => RunOperationAsync(
             "CollectionExists",
-            () => _chromaClient.CollectionExistsAsync(Name, cancellationToken));
+            () => _chromaClient.Client.CollectionExistsAsync(Name, cancellationToken: cancellationToken));
 
     /// <inheritdoc />
     public override async Task EnsureCollectionExistsAsync(CancellationToken cancellationToken = default)
@@ -178,7 +178,7 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
 
         var collection = await RunOperationAsync(
             "EnsureCollectionExists",
-            () => _chromaClient.GetOrCreateCollectionAsync(definition, cancellationToken)).ConfigureAwait(false);
+            () => _chromaClient.Client.GetOrCreateCollectionAsync(definition, cancellationToken: cancellationToken)).ConfigureAwait(false);
 
         // An existing collection keeps its space, which can differ from the one of the definition.
         _chromaCollection = VerifySpace(collection);
@@ -191,9 +191,9 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
             {
                 _chromaCollection = null;
 
-                if (await _chromaClient.CollectionExistsAsync(Name, cancellationToken).ConfigureAwait(false))
+                if (await _chromaClient.Client.CollectionExistsAsync(Name, cancellationToken: cancellationToken).ConfigureAwait(false))
                 {
-                    await _chromaClient.DeleteCollectionAsync(Name, cancellationToken).ConfigureAwait(false);
+                    await _chromaClient.Client.DeleteCollectionAsync(Name, cancellationToken: cancellationToken).ConfigureAwait(false);
                 }
             });
 
@@ -228,18 +228,13 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
             throw new NotSupportedException(VectorDataStrings.IncludeVectorsNotSupportedWithEmbeddingGeneration);
         }
 
-        // With WithBatchSplitting the client reads the ids in batches: Chroma Cloud returns at most 300 records per request.
+        // The client reads the ids in batches: Chroma Cloud returns at most 300 records per request.
         var entries = await RunOperationAsync(
             OperationName,
-            () => RunOnCollectionAsync(collection => _chromaClient.GetAsync(
-                collection,
+            () => RunOnCollectionAsync(collection => GetCollectionClient(collection).GetAsync(
                 ids,
-                where: null,
-                whereDocument: null,
-                limit: null,
-                offset: null,
-                GetInclude(includeVectors),
-                cancellationToken), cancellationToken)).ConfigureAwait(false);
+                include: GetInclude(includeVectors),
+                cancellationToken: cancellationToken), cancellationToken)).ConfigureAwait(false);
 
         foreach (var entry in entries)
         {
@@ -268,10 +263,9 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
 
         return RunOperationAsync(
             DeleteName,
-            () => RunOnCollectionAsync(collection => _chromaClient.DeleteAsync(
-                collection,
+            () => RunOnCollectionAsync(collection => GetCollectionClient(collection).DeleteAsync(
                 ids,
-                cancellationToken), cancellationToken));
+                cancellationToken: cancellationToken), cancellationToken));
     }
 
     /// <inheritdoc />
@@ -335,8 +329,7 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
 
         await RunOperationAsync(
             UpsertName,
-            () => RunOnCollectionAsync(collection => _chromaClient.UpsertAsync(
-                collection,
+            () => RunOnCollectionAsync(collection => GetCollectionClient(collection).UpsertAsync(
                 ids,
                 embeddings,
                 hasMetadata ? metadatas : null,
@@ -386,14 +379,13 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
         // Chroma has no offset in queries: ask for the skipped records too, and drop them here.
         var entries = await RunOperationAsync(
             "Query",
-            () => RunOnCollectionAsync(collection => _chromaClient.QueryAsync(
-                collection,
+            () => RunOnCollectionAsync(collection => GetCollectionClient(collection).QueryAsync(
                 vector,
                 top + options.Skip,
                 filter.Where,
                 filter.WhereDocument,
-                filter.Ids,
                 include,
+                filter.Ids,
                 cancellationToken), cancellationToken)).ConfigureAwait(false);
 
         foreach (var entry in entries.Skip(options.Skip))
@@ -453,8 +445,7 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
 
         var entries = await RunOperationAsync(
             "Search",
-            () => RunOnCollectionAsync(collection => _chromaClient.SearchAsync(
-                collection,
+            () => RunOnCollectionAsync(collection => GetCollectionClient(collection).SearchAsync(
                 new ChromaSearch
                 {
                     Where = filter.Where,
@@ -465,7 +456,7 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
                     Offset = options.Skip,
                     Select = select,
                 },
-                cancellationToken), cancellationToken)).ConfigureAwait(false);
+                cancellationToken: cancellationToken), cancellationToken)).ConfigureAwait(false);
 
         foreach (var entry in entries)
         {
@@ -557,11 +548,10 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
             yield break;
         }
 
-        // With WithBatchSplitting the client reads in pages: Chroma Cloud returns at most 300 records per request.
+        // The client reads in pages: Chroma Cloud returns at most 300 records per request.
         var entries = await RunOperationAsync(
             "Get",
-            () => RunOnCollectionAsync(collection => _chromaClient.GetAsync(
-                collection,
+            () => RunOnCollectionAsync(collection => GetCollectionClient(collection).GetAsync(
                 chromaFilter.Ids,
                 chromaFilter.Where,
                 chromaFilter.WhereDocument,
@@ -584,7 +574,7 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
         return
             serviceKey is not null ? null :
             serviceType == typeof(VectorStoreCollectionMetadata) ? _collectionMetadata :
-            serviceType == typeof(ChromaClient) ? _chromaClient.ChromaClient :
+            serviceType == typeof(ChromaClient) ? _chromaClient.Client :
             serviceType.IsInstanceOfType(this) ? this :
             null;
     }
@@ -626,7 +616,11 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
         => exception.ErrorType == "NotFoundError" || exception.StatusCode == System.Net.HttpStatusCode.NotFound;
 
     private async Task<ChromaCollection> GetChromaCollectionAsync(CancellationToken cancellationToken)
-        => _chromaCollection ??= VerifySpace(await _chromaClient.GetCollectionAsync(Name, cancellationToken).ConfigureAwait(false));
+        => _chromaCollection ??= VerifySpace(await _chromaClient.Client.GetCollectionAsync(Name, cancellationToken: cancellationToken).ConfigureAwait(false));
+
+    // The collection clients of one ChromaClient share what it keeps, like the server version.
+    private ChromaCollectionClient GetCollectionClient(ChromaCollection collection)
+        => _chromaClient.Client.GetCollectionClient(collection);
 
     /// <summary>
     /// Check that the collection uses the space of the distance function of the vector property: the scores are computed from

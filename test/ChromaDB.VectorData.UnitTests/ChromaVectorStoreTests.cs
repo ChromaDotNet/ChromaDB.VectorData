@@ -22,8 +22,19 @@ public class ChromaVectorStoreTests
 {
     private const string TestCollectionName = "testcollection";
 
-    private readonly Mock<MockableChromaClient> _chromaClientMock = new(MockBehavior.Strict);
+    private readonly Mock<ChromaClient> _chromaClientMock = new(MockBehavior.Strict);
     private readonly CancellationToken _testCancellationToken = new(false);
+
+    public ChromaVectorStoreTests()
+    {
+        // The vector store reads metadata exactly with a client of its own: here the same mock.
+        this._chromaClientMock
+            .Setup(x => x.WithMetadataValues(ChromaMetadataValues.Exact))
+            .Returns(this._chromaClientMock.Object);
+        this._chromaClientMock
+            .Setup(x => x.Options)
+            .Returns(new ChromaConfigurationOptions("http://localhost:8000"));
+    }
 
     [Fact]
     public void ReadsMetadataExactlyWithTheClientOfTheCaller()
@@ -95,8 +106,8 @@ public class ChromaVectorStoreTests
         // Arrange.
         var definitions = new List<ChromaCollectionDefinition>();
         this._chromaClientMock
-            .Setup(x => x.GetOrCreateCollectionAsync(It.IsAny<ChromaCollectionDefinition>(), this._testCancellationToken))
-            .Callback<ChromaCollectionDefinition, CancellationToken>((d, _) => definitions.Add(d))
+            .Setup(x => x.GetOrCreateCollectionAsync(It.IsAny<ChromaCollectionDefinition>(), null, null, this._testCancellationToken))
+            .Callback<ChromaCollectionDefinition, string?, string?, CancellationToken>((d, _, _, _) => definitions.Add(d))
             .ReturnsAsync(new ChromaCollection(TestCollectionName) { Id = Guid.NewGuid() });
         using var sut = new ChromaVectorStore(this._chromaClientMock.Object, new() { CreateBm25Indexes = true });
         using var collection = sut.GetCollection<string, FullTextHotel>(TestCollectionName);
@@ -146,8 +157,8 @@ public class ChromaVectorStoreTests
     {
         // Arrange.
         this._chromaClientMock
-            .Setup(x => x.ListCollectionsAsync(this._testCancellationToken))
-            .ReturnsAsync(["collection1", "collection2"]);
+            .Setup(x => x.ListCollectionsAsync(null, null, this._testCancellationToken))
+            .ReturnsAsync([new ChromaCollection("collection1"), new ChromaCollection("collection2")]);
         using var sut = new ChromaVectorStore(this._chromaClientMock.Object);
 
         // Act.
