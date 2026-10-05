@@ -2,11 +2,13 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using ChromaDB.Client;
+using ChromaDB.Client.Models;
 using Microsoft.Extensions.VectorData;
 using Moq;
 using Xunit;
@@ -85,6 +87,44 @@ public class ChromaVectorStoreTests
 
         // Assert.
         await Assert.ThrowsAsync<ObjectDisposedException>(() => httpClient.GetAsync(new Uri("http://localhost:8000/api/v2/heartbeat")));
+    }
+
+    [Fact]
+    public async Task CollectionsCreateTheBm25IndexesWithTheOptionOfTheStoreAsync()
+    {
+        // Arrange.
+        var definitions = new List<ChromaCollectionDefinition>();
+        this._chromaClientMock
+            .Setup(x => x.GetOrCreateCollectionAsync(It.IsAny<ChromaCollectionDefinition>(), this._testCancellationToken))
+            .Callback<ChromaCollectionDefinition, CancellationToken>((d, _) => definitions.Add(d))
+            .ReturnsAsync(new ChromaCollection(TestCollectionName) { Id = Guid.NewGuid() });
+        using var sut = new ChromaVectorStore(this._chromaClientMock.Object, new() { CreateBm25Indexes = true });
+        using var collection = sut.GetCollection<string, FullTextHotel>(TestCollectionName);
+        using var dynamicCollection = sut.GetDynamicCollection(TestCollectionName, new()
+        {
+            Properties =
+            [
+                new VectorStoreKeyProperty("Key", typeof(string)),
+                new VectorStoreDataProperty("Text", typeof(string)) { IsFullTextIndexed = true },
+                new VectorStoreVectorProperty("Vector", typeof(ReadOnlyMemory<float>), 4),
+            ]
+        });
+
+        // Act.
+        await collection.EnsureCollectionExistsAsync(this._testCancellationToken);
+        await dynamicCollection.EnsureCollectionExistsAsync(this._testCancellationToken);
+
+        // Assert.
+        Assert.Equal(2, definitions.Count);
+        Assert.All(definitions, definition => Assert.NotNull(definition.Schema));
+    }
+
+    [Fact]
+    public void CopiesOfTheOptionsKeepCreateBm25Indexes()
+    {
+        // The registrations for dependency injection copy the options to add the embedding generator of the container.
+        Assert.True(new ChromaVectorStoreOptions(new ChromaVectorStoreOptions { CreateBm25Indexes = true }).CreateBm25Indexes);
+        Assert.True(new ChromaCollectionOptions(new ChromaCollectionOptions { CreateBm25Indexes = true }).CreateBm25Indexes);
     }
 
     [Fact]

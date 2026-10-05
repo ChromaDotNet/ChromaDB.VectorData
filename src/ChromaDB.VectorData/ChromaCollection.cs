@@ -20,7 +20,7 @@ namespace ChromaDB.VectorData;
 /// <typeparam name="TKey">The data type of the record key. Can be either <see cref="string"/> or <see cref="Guid"/>.</typeparam>
 /// <typeparam name="TRecord">The data model to use for adding, updating and retrieving data from storage.</typeparam>
 #pragma warning disable CA1711 // Identifiers should not have incorrect suffix
-public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TRecord>
+public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TRecord>, IKeywordHybridSearchable<TRecord>
     where TKey : notnull
     where TRecord : class
 #pragma warning restore CA1711 // Identifiers should not have incorrect suffix
@@ -30,6 +30,12 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
 
     /// <summary>The default options for vector search.</summary>
     private static readonly VectorSearchOptions<TRecord> s_defaultVectorSearchOptions = new();
+
+    /// <summary>The default options for hybrid search.</summary>
+    private static readonly HybridSearchOptions<TRecord> s_defaultHybridSearchOptions = new();
+
+    /// <summary>The constant of reciprocal rank fusion, the default of Chroma.</summary>
+    private const double RrfK = 60;
 
     /// <summary>The name of the upsert operation for telemetry purposes.</summary>
     private const string UpsertName = "Upsert";
@@ -45,6 +51,9 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
 
     /// <summary>A mapper to use for converting between Chroma records and consumer models.</summary>
     private readonly ChromaMapper<TRecord> _mapper;
+
+    /// <summary>The properties to create a BM25 index for when the collection is created.</summary>
+    private readonly List<DataPropertyModel> _bm25Properties;
 
     /// <summary>The Chroma collection, once it has been read or created.</summary>
     private ChromaCollection? _chromaCollection;
@@ -119,6 +128,18 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
         Name = name;
         _model = modelFactory(options);
         _mapper = new ChromaMapper<TRecord>(_model);
+        _bm25Properties = options.CreateBm25Indexes ? ChromaCollectionCreateMapping.GetBm25Properties(_model) : [];
+
+        foreach (var property in _bm25Properties)
+        {
+            var key = ChromaCollectionCreateMapping.GetBm25Key(property);
+            if (_model.Properties.FirstOrDefault(p => p.StorageName == key) is { } other)
+            {
+                throw new ArgumentException(
+                    $"The BM25 index of the property '{property.ModelName}' is on the metadata key '{key}', which the property '{other.ModelName}' uses too. " +
+                    "Give one of them another storage name, or don't create the BM25 indexes.");
+            }
+        }
 
         // The code above can throw, so we need to create the client after the model is built and verified.
         // In case an exception is thrown, we don't need to dispose any resources.
@@ -151,9 +172,9 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
     /// <inheritdoc />
     public override async Task EnsureCollectionExistsAsync(CancellationToken cancellationToken = default)
     {
-        // IsFullTextIndexed is accepted and has no effect, like IsIndexed: Chroma indexes every metadata field for filtering,
-        // and the provider has no hybrid search, the only operation that uses a full-text index.
-        var definition = ChromaCollectionCreateMapping.MapCollectionDefinition(Name, _model.VectorProperty);
+        // Chroma indexes every metadata field for filtering, so IsIndexed has no effect. IsFullTextIndexed creates a BM25 index for
+        // hybrid search only with CreateBm25Indexes: only Chroma Cloud has these indexes.
+        var definition = ChromaCollectionCreateMapping.MapCollectionDefinition(Name, _model.VectorProperty, _bm25Properties);
 
         var collection = await RunOperationAsync(
             "EnsureCollectionExists",
@@ -403,6 +424,116 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
                 _mapper.MapFromStorageToDataModel(entry.Id, entry.Embeddings, entry.Metadata, entry.Document, options.IncludeVectors),
                 score);
         }
+    }
+
+    /// <inheritdoc />
+    public async IAsyncEnumerable<VectorSearchResult<TRecord>> HybridSearchAsync<TInput>(
+        TInput searchValue,
+        ICollection<string> keywords,
+        int top,
+        HybridSearchOptions<TRecord>? options = null,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        where TInput : notnull
+    {
+        Throw.IfNull(searchValue);
+        Throw.IfNull(keywords);
+        Throw.IfLessThan(top, 1);
+
+        options ??= s_defaultHybridSearchOptions;
+        if (options.IncludeVectors && _model.EmbeddingGenerationRequired)
+        {
+            throw new NotSupportedException(VectorDataStrings.IncludeVectorsNotSupportedWithEmbeddingGeneration);
+        }
+
+        var vectorProperty = _model.GetVectorPropertyOrSingle<TRecord>(new() { VectorProperty = options.VectorProperty });
+        var textProperty = _model.GetFullTextDataPropertyOrSingle(options.AdditionalProperty);
+        var vector = await GetSearchVectorAsync(searchValue, vectorProperty, cancellationToken).ConfigureAwait(false);
+
+        var filter = options.Filter is not null
+            ? new ChromaFilterTranslator().Translate(options.Filter, _model)
+            : ChromaFilter.All;
+        if (filter.MatchesNothing)
+        {
+            yield break;
+        }
+
+        List<string> select = [ChromaSearchKeys.Metadata, ChromaSearchKeys.Score];
+        if (_mapper.HasDocument)
+        {
+            select.Add(ChromaSearchKeys.Document);
+        }
+        if (options.IncludeVectors)
+        {
+            select.Add(ChromaSearchKeys.Embedding);
+        }
+
+        var entries = await RunOperationAsync(
+            "Search",
+            () => RunOnCollectionAsync(collection => _chromaClient.SearchAsync(
+                collection,
+                new ChromaSearch
+                {
+                    Where = filter.Where,
+                    WhereDocument = filter.WhereDocument,
+                    Ids = filter.Ids,
+                    Rank = GetHybridRank(vector, string.Join(" ", keywords), GetBm25IndexKey(collection, textProperty), top + options.Skip),
+                    Limit = top,
+                    Offset = options.Skip,
+                    Select = select,
+                },
+                cancellationToken), cancellationToken)).ConfigureAwait(false);
+
+        foreach (var entry in entries)
+        {
+            // Chroma ranks by the opposite of the RRF score, the lowest first: the score is the RRF score, the highest first.
+            var score = -(double)entry.Score!.Value;
+            if (options.ScoreThreshold is { } threshold && score < threshold)
+            {
+                continue;
+            }
+
+            yield return new VectorSearchResult<TRecord>(
+                _mapper.MapFromStorageToDataModel(entry.Id, entry.Embedding, entry.Metadata, entry.Document, options.IncludeVectors),
+                score);
+        }
+    }
+
+    /// <summary>
+    /// Get the reciprocal rank fusion of the vector search and of the BM25 search of the keywords, each among the records it ranks
+    /// first, as many as the results and the skipped ones. A record that one of them does not rank gets the last rank in it.
+    /// </summary>
+    /// <remarks>
+    /// A keyword search finds the records with a keyword, but a sparse search of Chroma ranks every record, at a distance of
+    /// 1 minus the dot product: 1 for a record without a keyword. So the BM25 search counts only for the records at a distance
+    /// below 1, as if the others were not found. Chroma ranks by the opposite of the fused score, the lowest first.
+    /// </remarks>
+    private static ChromaRank GetHybridRank(ReadOnlyMemory<float> vector, string keywords, string bm25Key, int candidates)
+    {
+        var vectorRank = ChromaRank.Knn(vector, limit: candidates, defaultScore: candidates, returnRank: true);
+        var bm25Rank = ChromaRank.SparseKnn(keywords, bm25Key, limit: candidates, defaultScore: candidates, returnRank: true);
+        var bm25Distance = ChromaRank.SparseKnn(keywords, bm25Key, limit: candidates, defaultScore: 1);
+
+        // 1 for a record with a keyword, whose dot product is positive, and 0 for the others.
+        var hasKeyword = ChromaRank.Min(1, (1 - bm25Distance) * 1_000_000);
+
+        return -(1 / (RrfK + vectorRank) + hasKeyword / (RrfK + bm25Rank));
+    }
+
+    /// <summary>
+    /// Get the metadata key of the BM25 index on the text of the given property: the one the provider creates, or one created elsewhere,
+    /// like by the Python client of Chroma, on the metadata key of the property or on the documents for the property stored as the document.
+    /// </summary>
+    private string GetBm25IndexKey(ChromaCollection collection, DataPropertyModel property)
+    {
+        var isDocument = ChromaFieldMapping.GetDocumentProperty(_model)?.StorageName == property.StorageName;
+
+        // The client computes the vectors of the text with the function of the index, which has to be chroma_bm25.
+        return collection.SparseVectorIndexes.FirstOrDefault(index =>
+                index.Bm25Function is not null
+                && (index.SourceKey == property.StorageName || (isDocument && index.SourceKey == ChromaSearchKeys.Document)))?.Key
+            ?? throw new InvalidOperationException(
+                $"The Chroma collection '{Name}' has no BM25 index on the text of the property '{property.ModelName}', which hybrid search needs. " +
+                $"Create the collection on Chroma Cloud with {nameof(ChromaCollectionOptions)}.{nameof(ChromaCollectionOptions.CreateBm25Indexes)}.");
     }
 
     private static async ValueTask<ReadOnlyMemory<float>> GetSearchVectorAsync<TInput>(TInput searchValue, VectorPropertyModel vectorProperty, CancellationToken cancellationToken)

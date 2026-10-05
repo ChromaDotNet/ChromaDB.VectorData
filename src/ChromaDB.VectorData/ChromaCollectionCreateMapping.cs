@@ -14,21 +14,48 @@ namespace ChromaDB.VectorData;
 internal static class ChromaCollectionCreateMapping
 {
     /// <summary>
-    /// Maps the vector property to the definition of the Chroma collection.
+    /// The suffix of the metadata key of the BM25 index of a property: the index of <c>Text</c> is on <c>Text_bm25</c>.
+    /// </summary>
+    private const string Bm25KeySuffix = "_bm25";
+
+    /// <summary>
+    /// Maps the vector property and the BM25 indexes to the definition of the Chroma collection.
     /// </summary>
     /// <param name="name">The name of the collection.</param>
     /// <param name="vectorProperty">The vector property.</param>
+    /// <param name="bm25Properties">The properties to create a BM25 index for.</param>
     /// <returns>The definition to create the collection with.</returns>
     /// <exception cref="NotSupportedException">Thrown if the property has options that Chroma does not support.</exception>
-    public static ChromaCollectionDefinition MapCollectionDefinition(string name, VectorPropertyModel vectorProperty)
+    public static ChromaCollectionDefinition MapCollectionDefinition(string name, VectorPropertyModel vectorProperty, IReadOnlyList<DataPropertyModel> bm25Properties)
     {
         if (vectorProperty.IndexKind is not null and not IndexKind.Hnsw)
         {
             throw new NotSupportedException($"Index kind '{vectorProperty.IndexKind}' for {nameof(VectorStoreVectorProperty)} '{vectorProperty.ModelName}' is not supported by the Chroma VectorStore.");
         }
 
-        return new(name) { Configuration = new() { Space = GetSpace(vectorProperty) } };
+        ChromaCollectionSchema? schema = null;
+        foreach (var property in bm25Properties)
+        {
+            // bm25: true makes Chroma apply the inverse document frequency, and the client computes the vectors from the text of the property.
+            schema = (schema ?? new()).WithSparseVectorIndex(GetBm25Key(property), property.StorageName, bm25: true, ChromaEmbeddingFunctionReference.ChromaBm25());
+        }
+
+        return new(name) { Configuration = new() { Space = GetSpace(vectorProperty) }, Schema = schema };
     }
+
+    /// <summary>
+    /// Get the string properties with full-text indexing, the ones a BM25 index can be created for.
+    /// </summary>
+    /// <param name="model">The model of the collection.</param>
+    public static List<DataPropertyModel> GetBm25Properties(CollectionModel model)
+        => model.DataProperties.Where(property => property.IsFullTextIndexed && property.Type == typeof(string)).ToList();
+
+    /// <summary>
+    /// Get the metadata key of the BM25 index the provider creates for the given property.
+    /// </summary>
+    /// <param name="property">The property.</param>
+    public static string GetBm25Key(DataPropertyModel property)
+        => property.StorageName + Bm25KeySuffix;
 
     /// <summary>
     /// Get the Chroma distance function, called space, for the given <paramref name="vectorProperty"/>.

@@ -10,9 +10,6 @@ public class ChromaTestSuiteImplementationTests : TestSuiteImplementationTests
 {
     protected override ICollection<Type> IgnoredTestBases { get; } =
     [
-        // Hybrid search not supported
-        typeof(HybridSearchTests<>),
-
         // A Chroma record has exactly one vector
         typeof(MultiVectorModelTests<>),
         typeof(NoVectorModelTests<>),

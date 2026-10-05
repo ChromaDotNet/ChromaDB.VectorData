@@ -329,6 +329,9 @@ public static class ChromaServiceCollectionExtensions
         services.Add(new ServiceDescriptor(typeof(IVectorSearchable<TRecord>), serviceKey,
             static (sp, key) => sp.GetRequiredKeyedService<ChromaCollection<TKey, TRecord>>(key), lifetime));
 
+        services.Add(new ServiceDescriptor(typeof(IKeywordHybridSearchable<TRecord>), serviceKey,
+            static (sp, key) => sp.GetRequiredKeyedService<ChromaCollection<TKey, TRecord>>(key), lifetime));
+
         return services;
     }
 

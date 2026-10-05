@@ -4,6 +4,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ChromaDB.Client;
@@ -82,6 +83,158 @@ public class ChromaCollectionTests
 
         // Assert.
         this._chromaClientMock.Verify(x => x.GetOrCreateCollectionAsync(It.IsAny<ChromaCollectionDefinition>(), this._testCancellationToken), Times.Once);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task EnsureCollectionExistsCreatesTheBm25IndexesOnlyWithTheOptionAsync(bool createBm25Indexes)
+    {
+        // Arrange.
+        using var sut = new ChromaCollection<string, FullTextHotel>(() => this._chromaClientMock.Object, TestCollectionName, new ChromaCollectionOptions { CreateBm25Indexes = createBm25Indexes });
+        ChromaCollectionDefinition? definition = null;
+        this._chromaClientMock
+            .Setup(x => x.GetOrCreateCollectionAsync(It.IsAny<ChromaCollectionDefinition>(), this._testCancellationToken))
+            .Callback<ChromaCollectionDefinition, CancellationToken>((d, _) => definition = d)
+            .ReturnsAsync(this._chromaCollection);
+
+        // Act.
+        await sut.EnsureCollectionExistsAsync(this._testCancellationToken);
+
+        // Assert.
+        Assert.Equal(createBm25Indexes, definition!.Schema is not null);
+    }
+
+    [Fact]
+    public void ThrowsWhenAPropertyUsesTheKeyOfABm25Index()
+    {
+        var exception = Assert.Throws<ArgumentException>(() => new ChromaCollection<string, Bm25KeyClashHotel>(() => this._chromaClientMock.Object, TestCollectionName, new ChromaCollectionOptions { CreateBm25Indexes = true }));
+
+        Assert.Contains("'Description_bm25'", exception.Message);
+        Assert.Contains("'Other'", exception.Message);
+    }
+
+    [Fact]
+    public void AcceptsAPropertyWithTheKeyOfABm25IndexWithoutTheOption()
+    {
+        using var sut = new ChromaCollection<string, Bm25KeyClashHotel>(() => this._chromaClientMock.Object, TestCollectionName, null);
+    }
+
+    [Fact]
+    public async Task HybridSearchSendsTheRrfOfTheVectorAndBm25SearchesAsync()
+    {
+        // Arrange: the collection has the BM25 index the provider creates.
+        using var sut = this.CreateHybridCollection<FullTextHotel>(Bm25Index("Description_bm25", "Description"));
+        ChromaSearch? search = null;
+        this._chromaClientMock
+            .Setup(x => x.SearchAsync(It.Is<ChromaCollection>(c => c.Name == "hybridcollection"), It.IsAny<ChromaSearch>(), this._testCancellationToken))
+            .Callback<ChromaCollection, ChromaSearch, CancellationToken>((_, s, _) => search = s)
+            .ReturnsAsync(
+            [
+                new ChromaSearchEntry("h1") { Score = -0.032f, Document = "A pool and a spa", Metadata = new() { ["Description"] = "A pool and a spa", ["Rating"] = 5L } },
+                new ChromaSearchEntry("h2") { Score = -0.016f, Document = "A gym", Metadata = new() { ["Description"] = "A gym", ["Rating"] = 4L } },
+            ]);
+
+        // Act.
+        var results = await sut.HybridSearchAsync(new ReadOnlyMemory<float>([1, 2, 3, 4]), ["pool", "spa"], top: 2, new() { Skip = 1, Filter = h => h.Rating >= 4, ScoreThreshold = 0.02 }, this._testCancellationToken).ToListAsync();
+
+        // Assert: the RRF of the two searches, each among the top + skip records it ranks first, the others with the last rank;
+        // the BM25 search counts only for the records with a keyword, at a distance below 1.
+        Assert.Equal(
+            """{"$mul":[{"$val":-1},{"$sum":["""
+            + """{"$div":{"left":{"$val":1},"right":{"$sum":[{"$val":60},{"$knn":{"query":[1,2,3,4],"key":"#embedding","limit":3,"default":3,"return_rank":true}}]}}},"""
+            + """{"$div":{"left":{"$min":[{"$val":1},{"$mul":[{"$sub":{"left":{"$val":1},"right":{"$knn":{"query":"pool spa","key":"Description_bm25","limit":3,"default":1}}}},{"$val":1000000}]}]},"right":"""
+            + """{"$sum":[{"$val":60},{"$knn":{"query":"pool spa","key":"Description_bm25","limit":3,"default":3,"return_rank":true}}]}}}]}]}""",
+            search!.Rank!.ToString());
+        Assert.Equal(2, search.Limit);
+        Assert.Equal(1, search.Offset);
+        Assert.Equal("""{"Rating":{"$gte":4}}""", search.Where!.ToString());
+        Assert.Equal([ChromaSearchKeys.Metadata, ChromaSearchKeys.Score, ChromaSearchKeys.Document], search.Select);
+
+        // The score is the RRF score, the opposite of what Chroma returns, and the threshold applies to it.
+        var result = Assert.Single(results);
+        Assert.Equal("h1", result.Record.HotelId);
+        Assert.Equal("A pool and a spa", result.Record.Description);
+        Assert.Equal(0.032, result.Score!.Value, precision: 6);
+    }
+
+    [Fact]
+    public async Task HybridSearchUsesABm25IndexOnTheDocumentsForTheDocumentPropertyAsync()
+    {
+        // Arrange: a collection created by the Python client of Chroma, with the index on the documents.
+        using var sut = this.CreateHybridCollection<FullTextHotel>(Bm25Index("sparse_embedding", "#document"));
+        ChromaSearch? search = null;
+        this._chromaClientMock
+            .Setup(x => x.SearchAsync(It.IsAny<ChromaCollection>(), It.IsAny<ChromaSearch>(), this._testCancellationToken))
+            .Callback<ChromaCollection, ChromaSearch, CancellationToken>((_, s, _) => search = s)
+            .ReturnsAsync([]);
+
+        // Act.
+        await sut.HybridSearchAsync(new ReadOnlyMemory<float>([1, 2, 3, 4]), ["pool"], top: 1, cancellationToken: this._testCancellationToken).ToListAsync();
+
+        // Assert.
+        Assert.Contains("\"key\":\"sparse_embedding\"", search!.Rank!.ToString());
+    }
+
+    [Fact]
+    public async Task HybridSearchUsesTheIndexOfTheChosenPropertyAsync()
+    {
+        // Arrange.
+        using var sut = this.CreateHybridCollection<TwoFullTextHotel>(Bm25Index("Description_bm25", "Description"), Bm25Index("Review_bm25", "Review"));
+        ChromaSearch? search = null;
+        this._chromaClientMock
+            .Setup(x => x.SearchAsync(It.IsAny<ChromaCollection>(), It.IsAny<ChromaSearch>(), this._testCancellationToken))
+            .Callback<ChromaCollection, ChromaSearch, CancellationToken>((_, s, _) => search = s)
+            .ReturnsAsync([]);
+
+        // Act.
+        await sut.HybridSearchAsync(new ReadOnlyMemory<float>([1, 2, 3, 4]), ["great"], top: 1, new() { AdditionalProperty = h => h.Review }, this._testCancellationToken).ToListAsync();
+
+        // Assert: two full-text properties, so neither is stored as the document.
+        Assert.Contains("\"key\":\"Review_bm25\"", search!.Rank!.ToString());
+        Assert.Equal([ChromaSearchKeys.Metadata, ChromaSearchKeys.Score], search.Select);
+    }
+
+    [Fact]
+    public async Task HybridSearchThrowsWithoutABm25IndexAsync()
+    {
+        // Arrange: the strict mock fails on any search.
+        using var sut = this.CreateHybridCollection<FullTextHotel>();
+
+        // Act and assert.
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(async () => await sut.HybridSearchAsync(new ReadOnlyMemory<float>([1, 2, 3, 4]), ["pool"], top: 1, cancellationToken: this._testCancellationToken).ToListAsync());
+        Assert.Contains(nameof(ChromaCollectionOptions.CreateBm25Indexes), exception.Message);
+    }
+
+    [Fact]
+    public async Task HybridSearchThrowsForAnIndexWithAnotherFunctionAsync()
+    {
+        // Arrange: the client computes the vectors of the keywords only with chroma_bm25.
+        using var sut = this.CreateHybridCollection<FullTextHotel>(Bm25Index("Description_splade", "Description", "prithivida_splade"));
+
+        // Act and assert.
+        await Assert.ThrowsAsync<InvalidOperationException>(async () => await sut.HybridSearchAsync(new ReadOnlyMemory<float>([1, 2, 3, 4]), ["pool"], top: 1, cancellationToken: this._testCancellationToken).ToListAsync());
+    }
+
+    [Fact]
+    public async Task HybridSearchThrowsWithoutAChosenPropertyAmongTwoAsync()
+    {
+        using var sut = this.CreateHybridCollection<TwoFullTextHotel>(Bm25Index("Description_bm25", "Description"), Bm25Index("Review_bm25", "Review"));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () => await sut.HybridSearchAsync(new ReadOnlyMemory<float>([1, 2, 3, 4]), ["pool"], top: 1, cancellationToken: this._testCancellationToken).ToListAsync());
+    }
+
+    [Fact]
+    public async Task HybridSearchWithAFilterThatMatchesNoRecordSendsNoRequestAsync()
+    {
+        // Arrange: the strict mock fails on any request that was not set up.
+        using var sut = this.CreateHybridCollection<FullTextHotel>(Bm25Index("Description_bm25", "Description"));
+
+        // Act.
+        var results = await sut.HybridSearchAsync(new ReadOnlyMemory<float>([1, 2, 3, 4]), ["pool"], top: 1, new() { Filter = h => h.HotelId == "h1" && h.HotelId == "h2" }, this._testCancellationToken).ToListAsync();
+
+        // Assert.
+        Assert.Empty(results);
     }
 
     [Fact]
@@ -357,5 +510,21 @@ public class ChromaCollectionTests
         where TKey : notnull
         where TRecord : class
         => new(() => this._chromaClientMock.Object, TestCollectionName);
+
+    private ChromaCollection<string, TRecord> CreateHybridCollection<TRecord>(params string[] indexes)
+        where TRecord : class
+    {
+        var schema = JsonDocument.Parse("{\"keys\":{" + string.Join(",", indexes) + "}}").RootElement.Clone();
+        this._chromaClientMock
+            .Setup(x => x.GetCollectionAsync("hybridcollection", this._testCancellationToken))
+            .ReturnsAsync(new ChromaCollection("hybridcollection") { Id = Guid.NewGuid(), SchemaJson = schema });
+
+        return new(() => this._chromaClientMock.Object, "hybridcollection", null);
+    }
 #pragma warning restore IL2026, IL3050
+
+    // A sparse vector index as Chroma Cloud returns it in the schema of a collection.
+    private static string Bm25Index(string key, string sourceKey, string function = "chroma_bm25")
+        => "\"" + key + "\":{\"sparse_vector\":{\"sparse_vector_index\":{\"enabled\":true,\"config\":{\"source_key\":\"" + sourceKey + "\",\"bm25\":true,"
+            + "\"embedding_function\":{\"type\":\"known\",\"name\":\"" + function + "\",\"config\":{\"k\":1.2,\"b\":0.75,\"avg_doc_length\":256,\"token_max_length\":40}}}}}}";
 }

@@ -30,6 +30,8 @@ public sealed class ChromaVectorStore : VectorStore
 
     private readonly IEmbeddingGenerator? _embeddingGenerator;
 
+    private readonly bool _createBm25Indexes;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="ChromaVectorStore"/> class.
     /// </summary>
@@ -65,6 +67,7 @@ public sealed class ChromaVectorStore : VectorStore
 
         options ??= ChromaVectorStoreOptions.Default;
         _embeddingGenerator = options.EmbeddingGenerator;
+        _createBm25Indexes = options.CreateBm25Indexes;
 
         _metadata = new()
         {
@@ -94,7 +97,8 @@ public sealed class ChromaVectorStore : VectorStore
             : new ChromaCollection<TKey, TRecord>(_chromaClient.Share, name, new()
             {
                 Definition = definition,
-                EmbeddingGenerator = _embeddingGenerator
+                EmbeddingGenerator = _embeddingGenerator,
+                CreateBm25Indexes = _createBm25Indexes
             });
 
     /// <inheritdoc />
@@ -106,7 +110,8 @@ public sealed class ChromaVectorStore : VectorStore
         => new ChromaDynamicCollection(_chromaClient.Share, name, new ChromaCollectionOptions()
         {
             Definition = definition,
-            EmbeddingGenerator = _embeddingGenerator
+            EmbeddingGenerator = _embeddingGenerator,
+            CreateBm25Indexes = _createBm25Indexes
         });
 #pragma warning restore IDE0090
 

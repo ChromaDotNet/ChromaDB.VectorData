@@ -45,6 +45,18 @@ internal sealed class ChromaTestStore : TestStore
 
     public HttpClient HttpClient => this._httpClient ?? throw new InvalidOperationException("Not initialized");
 
+    /// <summary>
+    /// Whether the tests run against Chroma Cloud, the only Chroma with the Search API and the sparse vector indexes that hybrid search needs.
+    /// </summary>
+    public static bool IsChromaCloud => s_testUri is not null && new Uri(s_testUri).Host.EndsWith(".trychroma.com", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Creates a collection that creates a BM25 index for each string property with full-text indexing.
+    /// </summary>
+    public ChromaCollection<string, TRecord> CreateCollectionWithBm25Indexes<TRecord>(string name, VectorStoreCollectionDefinition definition)
+        where TRecord : class
+        => new(new ChromaClient(this.ChromaOptions, this.HttpClient), name, new() { Definition = definition, CreateBm25Indexes = true });
+
     public ChromaVectorStore GetVectorStore(ChromaVectorStoreOptions options)
         => new(this.ChromaOptions,
             this.HttpClient,

@@ -55,6 +55,21 @@ public sealed class TwoFullTextHotel
     public ReadOnlyMemory<float>? Embedding { get; set; }
 }
 
+public sealed class Bm25KeyClashHotel
+{
+    [VectorStoreKey]
+    public string HotelId { get; set; } = default!;
+
+    [VectorStoreData(IsFullTextIndexed = true)]
+    public string? Description { get; set; }
+
+    [VectorStoreData(StorageName = "Description_bm25")]
+    public string? Other { get; set; }
+
+    [VectorStoreVector(4)]
+    public ReadOnlyMemory<float>? Embedding { get; set; }
+}
+
 public sealed class FullTextHotel
 {
     [VectorStoreKey]

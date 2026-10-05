@@ -173,9 +173,18 @@ internal class MockableChromaClient : IDisposable
     }
 
     /// <summary>
+    /// Search the records with the Search API of Chroma, which only Chroma Cloud serves.
+    /// </summary>
+    /// <param name="collection">The collection, with its schema: the client computes the vectors of text queries with its sparse vector indexes.</param>
+    /// <param name="search">The search.</param>
+    /// <param name="cancellationToken">The token to monitor for cancellation requests.</param>
+    public virtual Task<List<ChromaSearchEntry>> SearchAsync(ChromaCollection collection, ChromaSearch search, CancellationToken cancellationToken = default)
+        => GetCollectionClient(collection).Search(search, cancellationToken: cancellationToken);
+
+    /// <summary>
     /// Insert or update records.
     /// </summary>
-    /// <param name="collection">The collection.</param>
+    /// <param name="collection">The collection, with its schema: the client computes the BM25 vectors of its sparse vector indexes.</param>
     /// <param name="ids">The ids of the records.</param>
     /// <param name="embeddings">The vectors of the records, in the same order as <paramref name="ids"/>.</param>
     /// <param name="metadatas">The metadata of the records, in the same order as <paramref name="ids"/>.</param>
