@@ -73,8 +73,8 @@ public sealed class ChromaPagedReadTests : IAsyncLifetime
         Assert.Equal(2, this._handler.GetRequests);
     }
 
-    // With the default store of the tests: on Chroma Cloud, CHROMA_TEST_MAX_BATCH_SIZE=300 sets the batch size, and more than
-    // 300 records per read are refused.
+    // With the default store of the tests: Chroma Cloud refuses more than 300 records per request, and on its addresses the
+    // client reads and writes in batches by itself.
     [Fact]
     public async Task More_records_than_a_page_of_Chroma_Cloud()
     {
