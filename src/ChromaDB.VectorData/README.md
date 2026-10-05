@@ -75,6 +75,19 @@ services.AddChromaVectorStore(new ChromaConfigurationOptions("https://api.trychr
 
 Connect with the options of the client: the API key goes in the `X-Chroma-Token` header, with the tenant and the database of the Chroma Cloud dashboard. Chroma Cloud reads and writes at most 300 records per request: with `WithBatchSplitting(maxBatchSize: 300)`, the client writes in batches of 300 and the provider reads in pages of 300. A search returns at most 300 results, `top` plus `Skip` included.
 
+## Hybrid search
+
+On Chroma Cloud, `HybridSearchAsync` searches with a vector and keywords together: it fuses the ranks of the vector search and of a BM25 search of the keywords in a full-text indexed `string` property. The BM25 search needs a BM25 index, a sparse vector index of Chroma, on the text of the property. With `CreateBm25Indexes`, creating the collection creates one for each full-text indexed `string` property, and the client computes the BM25 vectors of the records as it writes them:
+
+```csharp
+var collection = new ChromaCollection<string, Hotel>(client, "hotels", new() { CreateBm25Indexes = true });
+await collection.EnsureCollectionExistsAsync();
+
+var results = collection.HybridSearchAsync(embedding, ["pool", "spa"], top: 5);
+```
+
+`ChromaVectorStoreOptions` has the same option for the collections of a vector store. A collection created by another client of Chroma, like the Python one, works too when it has a `chroma_bm25` index on the text of the property, or on the documents for the property stored as the document. A record without any of the keywords gets nothing from the BM25 search, as in a keyword search. A single Chroma server has neither the Search API nor sparse vector indexes.
+
 ## Supported
 
 - Keys: `string` and `Guid`.
@@ -94,7 +107,7 @@ Connect with the options of the client: the API key goes in the `X-Chroma-Token`
 - `GetAsync` with a filter does not support ordering.
 - Comparisons work on numbers only.
 - Array properties need Chroma 1.5.0 or later.
-- Hybrid search is not supported.
+- Hybrid search needs Chroma Cloud.
 - Only one property can be the document: with more full-text indexed string properties, none is.
 
 The provider runs the Microsoft.Extensions.VectorData conformance tests against Chroma 1.5.0, 1.5.9 and the latest release, and passes them on Chroma Cloud.
