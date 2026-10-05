@@ -30,7 +30,8 @@ public sealed class ChromaCollectionOptions : VectorStoreCollectionOptions
     /// </summary>
     /// <remarks>
     /// Only Chroma Cloud has sparse vector indexes: a single Chroma server rejects them. The index of a property is on the metadata
-    /// key of the property followed by <c>_bm25</c>, and Chroma computes the BM25 vectors from its text. Hybrid search also works on a
+    /// key of the property followed by <c>_bm25</c>: ChromaDotNet.Client computes the BM25 vectors from its text as it writes the records,
+    /// and Chroma applies the inverse document frequency to them. Hybrid search also works on a
     /// collection created elsewhere, like by the Python client of Chroma, with a BM25 index on the text of the property, or on the
     /// documents for the property stored as the document. Only with this option the collection answers
     /// <see cref="IKeywordHybridSearchable{TRecord}"/> from <c>GetService</c>, which the <c>TextSearchStore</c> of Semantic Kernel asks
