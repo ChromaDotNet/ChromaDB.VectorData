@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   
   <PropertyGroup>
-    <VersionPrefix>0.4.0</VersionPrefix>
+    <VersionPrefix>0.4.1</VersionPrefix>
     <AssemblyName>ChromaDB.VectorData</AssemblyName>
     <PackageId>ChromaDotNet.VectorData</PackageId>
     <RootNamespace>$(AssemblyName)</RootNamespace>
@@ -11,7 +11,7 @@
     <Title>Chroma provider for Microsoft.Extensions.VectorData</Title>
     <Description>Microsoft.Extensions.VectorData provider for Chroma and Chroma Cloud, built on ChromaDotNet.Client. Community project, not affiliated with Chroma.</Description>
     <PackageTags>chroma chromadb chroma-cloud vector-database vectordata ai</PackageTags>
-    <PackageReleaseNotes>0.4.0: The provider follows the providers of the .NET Community Toolkit, and leaves to ChromaDotNet.Client 2.10.0 what is Chroma's: the upsert that deletes the values that are now null, the copy of the document for the filters, the BM25 indexes, and the filters on the key and on the document. Breaking: ChromaVectorStore and ChromaCollection take a ChromaClient and ownsClient. The registrations take a connection string, or the ChromaClient of the container. CreateBm25Indexes is gone: on Chroma Cloud, creating a collection creates a BM25 index for each full-text indexed string property, and only there a collection offers hybrid search through GetService. A DateTime filter finds the same ticks with the same Kind, and a negated comparison on a nullable property throws a NotSupportedException instead of leaving out the records where the property is null. All the releases: https://github.com/ChromaDotNet/ChromaDB.VectorData/releases</PackageReleaseNotes>
+    <PackageReleaseNotes>0.4.1: This version needs ChromaDotNet.Client 2.10.2. On Chroma Cloud, a filter on the keys with a large top, like GetAsync(r => r.Key == "a", top: 1000), no longer goes over the quota of 300 records per request: the client asks for at most as many records as there are keys. All the releases: https://github.com/ChromaDotNet/ChromaDB.VectorData/releases</PackageReleaseNotes>
   </PropertyGroup>
   
   <ItemGroup>
