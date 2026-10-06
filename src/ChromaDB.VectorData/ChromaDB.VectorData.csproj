@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   
   <PropertyGroup>
-    <VersionPrefix>0.3.5</VersionPrefix>
+    <VersionPrefix>0.3.6</VersionPrefix>
     <AssemblyName>ChromaDB.VectorData</AssemblyName>
     <PackageId>ChromaDotNet.VectorData</PackageId>
     <RootNamespace>$(AssemblyName)</RootNamespace>
@@ -11,7 +11,7 @@
     <Title>Chroma provider for Microsoft.Extensions.VectorData</Title>
     <Description>Microsoft.Extensions.VectorData provider for Chroma and Chroma Cloud, built on ChromaDotNet.Client. Community project, not affiliated with Chroma.</Description>
     <PackageTags>chroma chromadb chroma-cloud vector-database vectordata ai</PackageTags>
-    <PackageReleaseNotes>0.3.5: Upserting a record that exists now replaces it. Chroma merges the metadata of an upsert, so the provider reads which keys the record has stored. It deletes the keys that are now null or an empty list. It also deletes the BM25 vectors of texts that are now null, and the document of a null text. Before, the old values stayed, and filters still found them, like the namespaces of the TextSearchStore of Semantic Kernel. A new record gets no null keys. Chroma Cloud counts null keys in its 32 keys per record. If the text of the property stored as the document is longer than 8,182 bytes (the Chroma Cloud limit for a metadata value), it is stored in the document only. The BM25 index of that property then takes its text from the document. A DateTimeOffset is stored in UTC. Filters compare dates as == does in C#: instants for DateTimeOffset, ticks for DateTime. This version needs ChromaDotNet.Client 2.9.1. That version writes a double with an integer value as a double, so comparisons and Contains find it. It also sends a long chain of conditions as one list. All the releases: https://github.com/ChromaDotNet/ChromaDB.VectorData/releases</PackageReleaseNotes>
+    <PackageReleaseNotes>0.3.6: This version needs ChromaDotNet.Client 2.9.2. Chroma sends a float it cannot write as null, like the distance to an embedding beyond the range of a float. The client now reads it as NaN. Before, a search or a get with vectors that met one failed as a whole. The READMEs and the package notes use shorter sentences. All the releases: https://github.com/ChromaDotNet/ChromaDB.VectorData/releases</PackageReleaseNotes>
   </PropertyGroup>
   
   <ItemGroup>
