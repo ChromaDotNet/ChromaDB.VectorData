@@ -45,6 +45,15 @@ public sealed class ChromaKeyFilterTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task GetAsync_with_key_equality_and_a_large_top()
+    {
+        // Chroma Cloud takes at most 300 records per request: the client asks for no more records than the keys.
+        var records = await this._collection.GetAsync(r => r.Key == "b", top: 1000).ToListAsync();
+
+        Assert.Equal("b", Assert.Single(records).Key);
+    }
+
+    [Fact]
     public async Task GetAsync_with_keys_and_another_condition()
     {
         var keys = new List<string> { "a", "b" };
