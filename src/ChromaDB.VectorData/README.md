@@ -156,7 +156,7 @@ A single Chroma server has neither the Search API nor sparse vector indexes: the
 - Upserting a record that exists replaces it: a value that is now null, or an empty list, is deleted, and a null text deletes the document.
 - Chroma does not store empty lists. An empty array or list is not stored, and comes back as null.
 - `GetAsync` with a filter does not support ordering.
-- Comparisons work on numbers only, and a negated one, like `!(r.Rating > 3)`, does not match a record without a value.
+- Comparisons work on numbers only. A negated comparison, like `!(r.Rating > 3)`, is not supported on a nullable property: Chroma would leave out the records where the property is null.
 - A `DateTime` filter finds the same ticks with the same `Kind`.
 - Array properties need Chroma 1.5.0 or later.
 - Hybrid search needs Chroma Cloud.
