@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   
   <PropertyGroup>
-    <VersionPrefix>0.3.6</VersionPrefix>
+    <VersionPrefix>0.3.7</VersionPrefix>
     <AssemblyName>ChromaDB.VectorData</AssemblyName>
     <PackageId>ChromaDotNet.VectorData</PackageId>
     <RootNamespace>$(AssemblyName)</RootNamespace>
@@ -11,7 +11,7 @@
     <Title>Chroma provider for Microsoft.Extensions.VectorData</Title>
     <Description>Microsoft.Extensions.VectorData provider for Chroma and Chroma Cloud, built on ChromaDotNet.Client. Community project, not affiliated with Chroma.</Description>
     <PackageTags>chroma chromadb chroma-cloud vector-database vectordata ai</PackageTags>
-    <PackageReleaseNotes>0.3.6: This version needs ChromaDotNet.Client 2.9.2. Chroma sends a float it cannot write as null, like the distance to an embedding beyond the range of a float. The client now reads it as NaN. Before, a search or a get with vectors that met one failed as a whole. The READMEs and the package notes use shorter sentences. All the releases: https://github.com/ChromaDotNet/ChromaDB.VectorData/releases</PackageReleaseNotes>
+    <PackageReleaseNotes>0.3.7: The README now says that AddChromaVectorStore and AddKeyedChromaVectorStore work with trimming and NativeAOT, as they do since 0.3.2. Only AddChromaCollection and AddKeyedChromaCollection are marked as incompatible. All the releases: https://github.com/ChromaDotNet/ChromaDB.VectorData/releases</PackageReleaseNotes>
   </PropertyGroup>
   
   <ItemGroup>
