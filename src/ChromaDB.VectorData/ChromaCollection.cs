@@ -521,6 +521,7 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
     /// <param name="operationName">The type of database operation being run.</param>
     /// <param name="operation">The operation to run.</param>
     /// <returns>The result of the operation.</returns>
-    private Task<T> RunOperationAsync<T>(string operationName, Func<Task<T>> operation)
-        => VectorStoreErrorHandler.RunOperationAsync<T, ChromaException>(_collectionMetadata, operationName, operation);
+    // Awaited here rather than returned: otherwise the NativeAOT compiler of .NET 10 fails on the state machine of the handler (dotnet/runtime#120847).
+    private async Task<T> RunOperationAsync<T>(string operationName, Func<Task<T>> operation)
+        => await VectorStoreErrorHandler.RunOperationAsync<T, ChromaException>(_collectionMetadata, operationName, operation).ConfigureAwait(false);
 }
