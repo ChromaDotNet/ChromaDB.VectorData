@@ -2,7 +2,7 @@
 
 # ChromaDotNet.VectorData
 
-[Chroma](https://www.trychroma.com/) provider for [Microsoft.Extensions.VectorData](https://learn.microsoft.com/dotnet/ai/vector-stores/overview), built on [ChromaDotNet.Client](https://github.com/ChromaDotNet/ChromaDB.Client).
+A [Chroma](https://www.trychroma.com/) provider for [Microsoft.Extensions.VectorData](https://learn.microsoft.com/dotnet/ai/vector-stores/overview), built on [ChromaDotNet.Client](https://github.com/ChromaDotNet/ChromaDB.Client).
 
 > This is a community project. It is not affiliated with or endorsed by Chroma.
 
@@ -59,7 +59,7 @@ public sealed class Hotel
 }
 ```
 
-With dependency injection, the vector store takes the `ChromaClient` of the container, like the singleton that [ChromaDotNet.Client.DependencyInjection](https://www.nuget.org/packages/ChromaDotNet.Client.DependencyInjection) registers with an `HttpClient` from `IHttpClientFactory`:
+With dependency injection, the vector store takes the `ChromaClient` from the container. That can be the singleton that [ChromaDotNet.Client.DependencyInjection](https://www.nuget.org/packages/ChromaDotNet.Client.DependencyInjection) registers, which gets its `HttpClient` from `IHttpClientFactory`:
 
 ```csharp
 // dotnet add package ChromaDotNet.Client.DependencyInjection
@@ -70,7 +70,7 @@ services.AddChromaClient(_ => new ChromaConfigurationOptions("http://localhost:8
 services.AddChromaVectorStore();
 ```
 
-Or it creates its own client, from a URI or from the options of the client, like those of Chroma Cloud:
+Or the vector store creates its own client, from a URI or from client options, like the ones for Chroma Cloud:
 
 ```csharp
 services.AddChromaVectorStore("http://localhost:8000");
@@ -79,17 +79,34 @@ services.AddChromaVectorStore(new ChromaConfigurationOptions("https://api.trychr
     .WithChromaToken("<api key>"));
 ```
 
-`AddChromaCollection<TKey, TRecord>(name, …)` registers one collection in the same three ways, and `AddKeyedChromaVectorStore` and `AddKeyedChromaCollection` register them under a key. With these registrations, the embedding generator is the `EmbeddingGenerator` of `ChromaVectorStoreOptions` or `ChromaCollectionOptions`, or else an `IEmbeddingGenerator` registered in the container. Without dependency injection, `ChromaVectorStore` and `ChromaCollection` also take the options of the client with an `HttpClient`, which they dispose with `ownsClient: true`. `GetService(typeof(ChromaClient))` on the vector store or a collection returns the client it uses.
+`AddChromaCollection<TKey, TRecord>(name, …)` registers one collection in the same three ways. `AddKeyedChromaVectorStore` and `AddKeyedChromaCollection` register them under a key.
+
+With these registrations, the embedding generator is the `EmbeddingGenerator` set in `ChromaVectorStoreOptions` or `ChromaCollectionOptions`. If none is set, it is an `IEmbeddingGenerator` registered in the container.
+
+Without dependency injection, `ChromaVectorStore` and `ChromaCollection` also take client options and an `HttpClient`. When you pass `ownsClient: true`, they dispose that `HttpClient`.
+
+`GetService(typeof(ChromaClient))` on the vector store or on a collection returns the client it uses.
 
 ## Chroma Cloud
 
-Connect with the options of the client: the API key goes in the `X-Chroma-Token` header, with the tenant and the database of the Chroma Cloud dashboard. Chroma Cloud reads and writes at most 300 records per request: on its addresses the client writes and reads in batches of 300 by itself. A search returns at most 300 results, `top` plus `Skip` included.
+Connect with the client options. The API key goes in the `X-Chroma-Token` header. Set the tenant and the database shown in the Chroma Cloud dashboard.
 
-Chroma Cloud also limits the metadata of a record: at most 32 keys, keys of at most 36 bytes, and values of at most 8,182 bytes; a document has at most 16,384 bytes. Each property with a value is a key, and so is the BM25 vector of a property with `CreateBm25Indexes`, named after the property with `_bm25` added: there, the storage names of full-text indexed properties have at most 31 bytes. A text of the property stored as the document longer than 8,182 bytes is stored in the document only: `Contains` finds it, `==` does not.
+Chroma Cloud reads and writes at most 300 records per request. On Chroma Cloud addresses, the client reads and writes in batches of 300 by itself. A search returns at most 300 results, counting both `top` and `Skip`.
+
+Chroma Cloud also limits metadata and documents:
+
+- A record has at most 32 metadata keys.
+- A key has at most 36 bytes.
+- A value has at most 8,182 bytes.
+- A document has at most 16,384 bytes.
+
+Each property with a value is a key. With `CreateBm25Indexes`, so is the BM25 vector of a property, named after the property with `_bm25` added. In that case, the storage names of full-text indexed properties can have at most 31 bytes.
+
+If the text of the property stored as the document is longer than 8,182 bytes, it is stored in the document only. `Contains` finds it, but `==` does not.
 
 ## Hybrid search
 
-On Chroma Cloud, `HybridSearchAsync` searches with a vector and keywords together: it fuses the ranks of the vector search and of a BM25 search of the keywords in a full-text indexed `string` property. The BM25 search needs a BM25 index, a sparse vector index of Chroma, on the text of the property. With `CreateBm25Indexes`, creating the collection creates one for each full-text indexed `string` property, like `Name` of `Hotel` above, and the client computes the BM25 vectors of the records as it writes them:
+On Chroma Cloud, `HybridSearchAsync` searches with a vector and keywords together:
 
 ```csharp
 var collection = new ChromaCollection<string, Hotel>(client, "hotels-hybrid", new() { CreateBm25Indexes = true });
@@ -98,30 +115,57 @@ await collection.EnsureCollectionExistsAsync();
 var results = collection.HybridSearchAsync(new float[] { 0.1f, 0.2f, 0.3f, 0.4f }, ["pool", "spa"], top: 5);
 ```
 
-`ChromaVectorStoreOptions` has the same option for the collections of a vector store. Only with the option, and a full-text indexed `string` property, a collection answers `IKeywordHybridSearchable` from `GetService`, which the `TextSearchStore` of Semantic Kernel asks for to choose hybrid search over vector search. `AddChromaCollection` registers the collection as `IKeywordHybridSearchable<TRecord>` in any case: resolve it from the container only with the option. The score of a hybrid result is the reciprocal rank fusion score (k = 60) of the two searches: higher is better, well below 1, and `ScoreThreshold` applies to it. A collection created by another client of Chroma, like the Python one, works too when it has a `chroma_bm25` index on the text of the property, or on the documents for the property stored as the document. A record without any of the keywords gets nothing from the BM25 search, as in a keyword search. A single Chroma server has neither the Search API nor sparse vector indexes: there, creating a collection with `CreateBm25Indexes` fails.
+It fuses the ranks of two searches: the vector search, and a BM25 search of the keywords in a full-text indexed `string` property. The BM25 search needs a BM25 index on the text of the property. A BM25 index is a Chroma sparse vector index.
+
+With `CreateBm25Indexes`, creating the collection creates a BM25 index for each full-text indexed `string` property, like `Name` in `Hotel` above. The client then computes the BM25 vectors of the records as it writes them. `ChromaVectorStoreOptions` has the same option for the collections of a vector store.
+
+A collection answers `IKeywordHybridSearchable` from `GetService` only when the option is set and it has a full-text indexed `string` property. The `TextSearchStore` of Semantic Kernel asks for this interface to choose hybrid search over vector search. `AddChromaCollection` registers the collection as `IKeywordHybridSearchable<TRecord>` in any case, so resolve it from the container only when the option is set.
+
+The score of a hybrid result is the reciprocal rank fusion score (k = 60) of the two searches. Higher is better, and the score is well below 1. `ScoreThreshold` applies to it.
+
+A collection created by another Chroma client, like the Python one, works too when it has a `chroma_bm25` index on the text of the property. For the property stored as the document, the index goes on the documents.
+
+A record without any of the keywords gets nothing from the BM25 search, as in a keyword search.
+
+A single Chroma server has neither the Search API nor sparse vector indexes. On a single server, creating a collection with `CreateBm25Indexes` fails.
 
 ## Supported
 
 - Keys: `string` and `Guid`.
 - One vector per record: `ReadOnlyMemory<float>`, `Embedding<float>` or `float[]`, or any type with an embedding generator.
-- Data properties: `string`, `int`, `long`, `double`, `float`, `bool`, `DateTime`, `DateTimeOffset`, `DateOnly` (.NET 8 and later), their nullable forms, and arrays or `List<T>` of the non-nullable ones, stored as Chroma metadata; dates are stored as ISO 8601 strings, a `DateTimeOffset` in UTC, so it comes back as the same instant with offset zero.
-- Targets .NET 10, .NET 8, .NET Standard 2.0 and .NET Framework 4.6.2; NativeAOT needs .NET 8 or later.
+- Data properties, stored as Chroma metadata:
+  - `string`, `int`, `long`, `double`, `float`, `bool`, `DateTime`, `DateTimeOffset` and `DateOnly` (.NET 8 and later)
+  - their nullable forms
+  - arrays or `List<T>` of the non-nullable ones
+- Dates are stored as ISO 8601 strings. A `DateTimeOffset` is stored in UTC, so it comes back as the same instant with offset zero.
+- Targets .NET 10, .NET 8, .NET Standard 2.0 and .NET Framework 4.6.2. NativeAOT needs .NET 8 or later.
 - Distance functions: `CosineSimilarity` (the default), `CosineDistance`, `DotProductSimilarity`, `NegativeDotProductSimilarity`, `EuclideanDistance` and `EuclideanSquaredDistance`, with the HNSW index.
-- An existing collection must use the space of the distance function, as a collection created by another Chroma client without a space uses l2: otherwise the provider throws, rather than turning the distances of another space into scores.
-- Filters: `==` and `!=`, `<`, `<=`, `>` and `>=` on numbers, `&&`, `||`, `!`, `Contains` over an inline list or an array property, and `Any` with `Contains` over an inline list.
-- Filters on the key: `==` and `Contains` over a list of keys, joined to the other conditions with `&&`; Chroma looks the records up by id.
-- Full-text: the only full-text indexed `string` property is also stored as the Chroma document, where other Chroma clients store their text. `Contains` and `!Contains` on it filter the text with `where_document`, joined to the other conditions with `&&`, and a record that has its text in the document only reads it into that property. A null text is stored as no document, or as an empty one for a record that has a document, since Chroma keeps the old document for a null one; an empty document reads back as null.
-- NativeAOT and trimming: the dynamic collection, from `GetDynamicCollection` with a `VectorStoreCollectionDefinition`, works without reflection; `ChromaCollection<TKey, TRecord>` maps the properties of the record type by reflection. The `AddChroma…` registration methods are marked as incompatible with trimming and NativeAOT: there, register the vector store yourself, like `services.AddSingleton<VectorStore>(sp => new ChromaVectorStore(sp.GetRequiredService<ChromaClient>()));`.
+- An existing collection must use the space of the distance function. A collection created by another Chroma client without a space uses l2. If the space differs, the provider throws, rather than turning the distances of another space into scores.
+- Filters:
+  - `==` and `!=`
+  - `<`, `<=`, `>` and `>=` on numbers
+  - `&&`, `||` and `!`
+  - `Contains` over an inline list or an array property
+  - `Any` with `Contains` over an inline list
+- Filters on the key: `==`, and `Contains` over a list of keys, joined to the other conditions with `&&`. Chroma looks the records up by id.
+- Full-text: the only full-text indexed `string` property is also stored as the Chroma document. That is where other Chroma clients store their text.
+  - `Contains` and `!Contains` on it filter the text with `where_document`, joined to the other conditions with `&&`.
+  - When a record has its text in the document only, the provider reads it into that property.
+  - A null text is stored as no document. For a record that has a document, it is stored as an empty one, since Chroma keeps the old document when it gets a null one.
+  - An empty document reads back as null.
+- NativeAOT and trimming: the dynamic collection works without reflection. You get it from `GetDynamicCollection` with a `VectorStoreCollectionDefinition`. `ChromaCollection<TKey, TRecord>` maps the properties of the record type by reflection. The `AddChroma…` registration methods are marked as incompatible with trimming and NativeAOT. There, register the vector store yourself, like `services.AddSingleton<VectorStore>(sp => new ChromaVectorStore(sp.GetRequiredService<ChromaClient>()));`.
 
 ## Limitations
 
-- Chroma metadata has no null values: a null property is not stored, and filtering on null is not supported. Upserting a record that exists replaces it: a value that is now null, or an empty list, is deleted. For this, when a record has null values, the provider first reads which keys it has stored, and deletes only those.
-- Chroma does not store empty lists: an empty array or list is not stored, and comes back as null.
+- Chroma metadata has no null values. A null property is not stored, and filtering on null is not supported.
+- Upserting a record that exists replaces it, so a value that is now null, or an empty list, is deleted. To do this when a record has null values, the provider first reads which keys the record has stored, and deletes only those.
+- Chroma does not store empty lists. An empty array or list is not stored, and comes back as null.
 - `GetAsync` with a filter does not support ordering.
 - Comparisons work on numbers only.
-- Dates are strings in Chroma: `==`, `!=` and `Contains` compare a `DateTimeOffset` as an instant, and a `DateTime` by its ticks whatever its kind, a `Local` one with the time zone of this machine. A `DateTimeOffset` stored by a version before 0.3.5 with another offset is found only with that offset.
+- Dates are strings in Chroma. `==`, `!=` and `Contains` compare a `DateTimeOffset` as an instant. They compare a `DateTime` by its ticks, whatever its kind. For a `Local` one, they use the time zone of this machine.
+- A `DateTimeOffset` that a version before 0.3.5 stored with another offset is found only with that offset.
 - Array properties need Chroma 1.5.0 or later.
 - Hybrid search needs Chroma Cloud.
-- Only one property can be the document: with more full-text indexed string properties, none is.
+- Only one property can be the document. With more than one full-text indexed string property, none is.
 
-The provider runs the Microsoft.Extensions.VectorData conformance tests in CI against Chroma 1.5.0, 1.5.9 and the latest release; on Chroma Cloud, hybrid search included, they are run by hand and pass.
+In CI, the provider runs the Microsoft.Extensions.VectorData conformance tests against Chroma 1.5.0, 1.5.9 and the latest release. On Chroma Cloud, the tests are run by hand, hybrid search included, and they pass.
