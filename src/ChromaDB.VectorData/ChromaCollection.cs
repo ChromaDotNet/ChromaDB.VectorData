@@ -1,4 +1,4 @@
-// Licensed to the .NET Foundation under one or more agreements.
+﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Diagnostics;
@@ -34,9 +34,6 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
     /// <summary>The default options for hybrid search.</summary>
     private static readonly HybridSearchOptions<TRecord> s_defaultHybridSearchOptions = new();
 
-    /// <summary>The constant of reciprocal rank fusion, the default of Chroma.</summary>
-    private const double RrfK = 60;
-
     /// <summary>The name of the upsert operation for telemetry purposes.</summary>
     private const string UpsertName = "Upsert";
 
@@ -45,6 +42,9 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
 
     /// <summary>Chroma client that can be used to manage the collections and records in a Chroma store.</summary>
     private readonly SharedChromaClient _chromaClient;
+
+    /// <summary>Chroma client of the records of the collection.</summary>
+    private readonly ChromaCollectionClient _records;
 
     /// <summary>The model for this collection.</summary>
     private readonly CollectionModel _model;
@@ -55,38 +55,19 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
     /// <summary>The properties to create a BM25 index for when the collection is created.</summary>
     private readonly List<DataPropertyModel> _bm25Properties;
 
-    /// <summary>The Chroma collection, once it has been read or created.</summary>
-    private ChromaCollection? _chromaCollection;
-
     /// <summary>
     /// Initializes a new instance of the <see cref="ChromaCollection{TKey, TRecord}"/> class.
     /// </summary>
-    /// <param name="chromaOptions">The options used to connect to Chroma.</param>
-    /// <param name="httpClient">The <see cref="HttpClient"/> used to send the requests to Chroma.</param>
+    /// <param name="chromaClient">Chroma client that can be used to manage the collections and records in a Chroma store.</param>
     /// <param name="name">The name of the collection that this <see cref="ChromaCollection{TKey, TRecord}"/> will access.</param>
-    /// <param name="ownsClient">A value indicating whether <paramref name="httpClient"/> is disposed when the collection is disposed.</param>
+    /// <param name="ownsClient">A value indicating whether <paramref name="chromaClient"/> is disposed when the collection is disposed.</param>
     /// <param name="options">Optional configuration options for this class.</param>
-    /// <exception cref="ArgumentNullException">Thrown if <paramref name="chromaOptions"/> or <paramref name="httpClient"/> is null.</exception>
+    /// <exception cref="ArgumentNullException">Thrown if the <paramref name="chromaClient"/> is null.</exception>
     /// <exception cref="ArgumentException">Thrown for any misconfigured options.</exception>
     [RequiresDynamicCode("This constructor is incompatible with NativeAOT. For dynamic mapping via Dictionary<string, object?>, instantiate ChromaDynamicCollection instead.")]
     [RequiresUnreferencedCode("This constructor is incompatible with trimming. For dynamic mapping via Dictionary<string, object?>, instantiate ChromaDynamicCollection instead")]
-    public ChromaCollection(ChromaConfigurationOptions chromaOptions, HttpClient httpClient, string name, bool ownsClient, ChromaCollectionOptions? options = null)
-        : this(() => new SharedChromaClient(chromaOptions, httpClient, ownsClient), name, options)
-    {
-    }
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="ChromaCollection{TKey, TRecord}"/> class.
-    /// </summary>
-    /// <param name="chromaClient">The Chroma client, for example from the dependency injection container. The collection does not dispose it.</param>
-    /// <param name="name">The name of the collection that this <see cref="ChromaCollection{TKey, TRecord}"/> will access.</param>
-    /// <param name="options">Optional configuration options for this class.</param>
-    /// <exception cref="ArgumentNullException">Thrown if <paramref name="chromaClient"/> is null.</exception>
-    /// <exception cref="ArgumentException">Thrown for any misconfigured options.</exception>
-    [RequiresDynamicCode("This constructor is incompatible with NativeAOT. For dynamic mapping via Dictionary<string, object?>, instantiate ChromaDynamicCollection instead.")]
-    [RequiresUnreferencedCode("This constructor is incompatible with trimming. For dynamic mapping via Dictionary<string, object?>, instantiate ChromaDynamicCollection instead")]
-    public ChromaCollection(ChromaClient chromaClient, string name, ChromaCollectionOptions? options = null)
-        : this(() => new SharedChromaClient(chromaClient), name, options)
+    public ChromaCollection(ChromaClient chromaClient, string name, bool ownsClient, ChromaCollectionOptions? options = null)
+        : this(() => new SharedChromaClient(chromaClient, ownsClient), name, options)
     {
     }
 
@@ -128,22 +109,14 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
         Name = name;
         _model = modelFactory(options);
         _mapper = new ChromaMapper<TRecord>(_model);
-        _bm25Properties = options.CreateBm25Indexes ? ChromaCollectionCreateMapping.GetBm25Properties(_model) : [];
-
-        foreach (var property in _bm25Properties)
-        {
-            var key = ChromaCollectionCreateMapping.GetBm25Key(property);
-            if (_model.Properties.FirstOrDefault(p => p.StorageName == key) is { } other)
-            {
-                throw new ArgumentException(
-                    $"The BM25 index of the property '{property.ModelName}' is on the metadata key '{key}', which the property '{other.ModelName}' uses too. " +
-                    "Give one of them another storage name, or don't create the BM25 indexes.");
-            }
-        }
+        _bm25Properties = ChromaCollectionCreateMapping.GetBm25Properties(_model);
 
         // The code above can throw, so we need to create the client after the model is built and verified.
         // In case an exception is thrown, we don't need to dispose any resources.
         _chromaClient = clientFactory();
+
+        var records = _chromaClient.Client.GetCollectionClient(name).WithMetadataValues(ChromaMetadataValues.Exact);
+        _records = _mapper.DocumentProperty is { } documentProperty ? records.WithDocumentCopyKey(documentProperty.StorageName) : records;
 
         _collectionMetadata = new()
         {
@@ -170,32 +143,22 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
             () => _chromaClient.Client.CollectionExistsAsync(Name, cancellationToken: cancellationToken));
 
     /// <inheritdoc />
-    public override async Task EnsureCollectionExistsAsync(CancellationToken cancellationToken = default)
+    public override Task EnsureCollectionExistsAsync(CancellationToken cancellationToken = default)
     {
-        // Chroma indexes every metadata field for filtering, so IsIndexed has no effect. IsFullTextIndexed creates a BM25 index for
-        // hybrid search only with CreateBm25Indexes: only Chroma Cloud has these indexes.
-        var definition = ChromaCollectionCreateMapping.MapCollectionDefinition(Name, _model.VectorProperty, _bm25Properties, ChromaFieldMapping.GetDocumentProperty(_model));
+        // Chroma indexes every metadata field for filtering, so IsIndexed has no effect.
+        var definition = ChromaCollectionCreateMapping.MapCollectionDefinition(Name, _model.VectorProperty, _bm25Properties, _mapper.DocumentProperty);
 
-        var collection = await RunOperationAsync(
+        return RunOperationAsync(
             "EnsureCollectionExists",
-            () => _chromaClient.Client.GetOrCreateCollectionAsync(definition, cancellationToken: cancellationToken)).ConfigureAwait(false);
-
-        // An existing collection keeps its space, which can differ from the one of the definition.
-        _chromaCollection = VerifySpace(collection);
+            () => _chromaClient.Client.GetOrCreateCollectionAsync(definition, cancellationToken: cancellationToken));
     }
 
     /// <inheritdoc />
     public override Task EnsureCollectionDeletedAsync(CancellationToken cancellationToken = default)
-        => RunOperationAsync("DeleteCollection",
-            async () =>
-            {
-                _chromaCollection = null;
-
-                if (await _chromaClient.Client.CollectionExistsAsync(Name, cancellationToken: cancellationToken).ConfigureAwait(false))
-                {
-                    await _chromaClient.Client.DeleteCollectionAsync(Name, cancellationToken: cancellationToken).ConfigureAwait(false);
-                }
-            });
+        => RunOperationAsync(
+            "DeleteCollection",
+            // Chroma 1.5 gives the lists of the records of a deleted collection to the records of other collections.
+            () => _chromaClient.Client.DeleteCollectionIfExistsAsync(Name, deleteRecordsFirst: true, cancellationToken: cancellationToken));
 
     /// <inheritdoc />
     public override async Task<TRecord?> GetAsync(TKey key, RecordRetrievalOptions? options = null, CancellationToken cancellationToken = default)
@@ -216,25 +179,21 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
 
         Throw.IfNull(keys);
 
-        var ids = keys.Select(key => ChromaFieldMapping.ToId(key)).ToList();
-        if (ids.Count == 0)
-        {
-            yield break;
-        }
-
         var includeVectors = options?.IncludeVectors ?? false;
         if (includeVectors && _model.EmbeddingGenerationRequired)
         {
             throw new NotSupportedException(VectorDataStrings.IncludeVectorsNotSupportedWithEmbeddingGeneration);
         }
 
-        // The client reads the ids in batches: Chroma Cloud returns at most 300 records per request.
+        var ids = keys.Select(key => ChromaFieldMapping.ToId(key)).ToList();
+        if (ids.Count == 0)
+        {
+            yield break;
+        }
+
         var entries = await RunOperationAsync(
             OperationName,
-            () => RunOnCollectionAsync(collection => GetCollectionClient(collection).GetAsync(
-                ids,
-                include: GetInclude(includeVectors),
-                cancellationToken: cancellationToken), cancellationToken)).ConfigureAwait(false);
+            () => _records.GetAsync(ids, include: GetInclude(includeVectors), cancellationToken: cancellationToken)).ConfigureAwait(false);
 
         foreach (var entry in entries)
         {
@@ -263,9 +222,7 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
 
         return RunOperationAsync(
             DeleteName,
-            () => RunOnCollectionAsync(collection => GetCollectionClient(collection).DeleteAsync(
-                ids,
-                cancellationToken: cancellationToken), cancellationToken));
+            () => _records.DeleteAsync(ids, cancellationToken: cancellationToken));
     }
 
     /// <inheritdoc />
@@ -303,8 +260,8 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
         var keyProperty = _model.KeyProperty;
         var ids = new List<string>();
         var embeddings = new List<ReadOnlyMemory<float>>();
-        var metadatas = new List<Dictionary<string, object>>();
-        var documents = new List<string>();
+        var metadatas = new List<IReadOnlyDictionary<string, object>?>();
+        var documents = new List<string?>();
         var recordIndex = 0;
         foreach (var record in records)
         {
@@ -316,8 +273,8 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
             var storageRecord = _mapper.MapFromDataToStorageModel(record, recordIndex++, generatedEmbeddings);
             ids.Add(storageRecord.Id);
             embeddings.Add(storageRecord.Embedding);
-            metadatas.Add(storageRecord.Metadata!);
-            documents.Add(storageRecord.Document!);
+            metadatas.Add(storageRecord.Metadata);
+            documents.Add(storageRecord.Document);
         }
 
         if (ids.Count == 0)
@@ -325,90 +282,17 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
             return;
         }
 
+        var chromaRecords = new ChromaRecords(ids)
+        {
+            Embeddings = embeddings,
+            Metadatas = metadatas,
+            Documents = _mapper.HasDocument ? documents : null,
+            NullDocumentsDelete = true,
+        };
+
         await RunOperationAsync(
             UpsertName,
-            () => RunOnCollectionAsync(async collection =>
-            {
-                var (upsertMetadatas, upsertDocuments) = await PrepareUpsertAsync(collection, ids, metadatas, documents, cancellationToken).ConfigureAwait(false);
-                await GetCollectionClient(collection).UpsertAsync(ids, embeddings, upsertMetadatas, upsertDocuments, cancellationToken).ConfigureAwait(false);
-            }, cancellationToken)).ConfigureAwait(false);
-    }
-
-    /// <summary>
-    /// Get the metadata and documents of an upsert that replaces the records that exist. Chroma merges the metadata of an upsert
-    /// into the record that exists, and keeps its document for a null one: what is gone is deleted with an explicit null, and
-    /// with an empty document for a null text. Only what the stored record has, read first: Chroma Cloud counts the keys of
-    /// the metadata, the null ones too, against its limits of 32 keys and 36 bytes per key. The client computes the vectors of
-    /// the sparse vector indexes, like the BM25 ones, from their text, and none without it: the old vector of a text that is
-    /// gone is deleted too, or a search would still find its words.
-    /// </summary>
-    private async Task<(List<Dictionary<string, object>>? Metadatas, List<string>? Documents)> PrepareUpsertAsync(
-        ChromaCollection collection,
-        List<string> ids,
-        List<Dictionary<string, object>> metadatas,
-        List<string> documents,
-        CancellationToken cancellationToken)
-    {
-        var hasDocument = _mapper.HasDocument;
-
-        // A record has something to delete only with a null value, or a null text for its document.
-        var candidates = new HashSet<string>();
-        for (var i = 0; i < ids.Count; i++)
-        {
-            if (metadatas[i]?.ContainsValue(null!) is true || (hasDocument && documents[i] is null))
-            {
-                candidates.Add(ids[i]);
-            }
-        }
-
-        var stored = new Dictionary<string, ChromaCollectionEntry>();
-        if (candidates.Count > 0)
-        {
-            var entries = await GetCollectionClient(collection).GetAsync(
-                candidates.ToList(),
-                include: ChromaGetInclude.Metadatas | (hasDocument ? ChromaGetInclude.Documents : 0),
-                cancellationToken: cancellationToken).ConfigureAwait(false);
-            foreach (var entry in entries)
-            {
-                stored[entry.Id] = entry;
-            }
-        }
-
-        var sparseVectorIndexes = collection.SparseVectorIndexes.Where(index => index.SourceKey is not null).ToList();
-        var upsertMetadatas = new List<Dictionary<string, object>>(ids.Count);
-        var upsertDocuments = hasDocument ? new List<string>(ids.Count) : null;
-        var hasMetadata = false;
-        for (var i = 0; i < ids.Count; i++)
-        {
-            var storedRecord = stored.TryGetValue(ids[i], out var entry) ? entry : null;
-            var storedMetadata = storedRecord?.Metadata;
-
-            Dictionary<string, object>? metadata = null;
-            foreach (var pair in metadatas[i] ?? [])
-            {
-                if (pair.Value is not null || storedMetadata?.ContainsKey(pair.Key) is true)
-                {
-                    (metadata ??= [])[pair.Key] = pair.Value!;
-                }
-            }
-
-            foreach (var index in sparseVectorIndexes)
-            {
-                var textIsGone = index.SourceKey == ChromaSearchKeys.Document
-                    ? hasDocument && documents[i] is null
-                    : metadatas[i]?.TryGetValue(index.SourceKey!, out var text) is true && text is null;
-                if (textIsGone && storedMetadata?.ContainsKey(index.Key) is true)
-                {
-                    (metadata ??= [])[index.Key] = null!;
-                }
-            }
-
-            upsertMetadatas.Add(metadata!);
-            hasMetadata |= metadata is not null;
-            upsertDocuments?.Add(documents[i] is null && storedRecord?.Document is { Length: > 0 } ? string.Empty : documents[i]);
-        }
-
-        return (hasMetadata ? upsertMetadatas : null, upsertDocuments);
+            () => _records.UpsertAsync(chromaRecords, cancellationToken)).ConfigureAwait(false);
     }
 
     #region Search
@@ -430,15 +314,12 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
         }
 
         var vectorProperty = _model.GetVectorPropertyOrSingle(options);
-        var vector = await GetSearchVectorAsync(searchValue, vectorProperty, cancellationToken).ConfigureAwait(false);
 
         var filter = options.Filter is not null
-            ? new ChromaFilterTranslator().Translate(options.Filter, _model)
-            : ChromaFilter.All;
-        if (filter.MatchesNothing)
-        {
-            yield break;
-        }
+            ? new ChromaFilterTranslator().Translate(options.Filter, _model, _mapper.DocumentProperty)
+            : ChromaWhereOperator.All;
+
+        var vector = await GetSearchVectorAsync(searchValue, vectorProperty, cancellationToken).ConfigureAwait(false);
 
         var include = ChromaQueryInclude.Metadatas | ChromaQueryInclude.Distances;
         if (_mapper.HasDocument)
@@ -450,19 +331,20 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
             include |= ChromaQueryInclude.Embeddings;
         }
 
-        // Chroma has no offset in queries: ask for the skipped records too, and drop them here.
+        // The scores come from the distances in the space of the vector property.
+        var query = new ChromaQuery([vector])
+        {
+            NResults = top,
+            Offset = options.Skip,
+            Where = filter,
+            Include = include,
+            ExpectedSpace = ChromaCollectionCreateMapping.GetSpace(vectorProperty),
+        };
         var entries = await RunOperationAsync(
             "Query",
-            () => RunOnCollectionAsync(collection => GetCollectionClient(collection).QueryAsync(
-                vector,
-                top + options.Skip,
-                filter.Where,
-                filter.WhereDocument,
-                include,
-                filter.Ids,
-                cancellationToken), cancellationToken)).ConfigureAwait(false);
+            () => _records.QueryAsync(query, cancellationToken)).ConfigureAwait(false);
 
-        foreach (var entry in entries.Skip(options.Skip))
+        foreach (var entry in entries[0])
         {
             var score = ChromaCollectionSearchMapping.ToScore(entry.Distance!.Value, vectorProperty.DistanceFunction);
             if (!ChromaCollectionSearchMapping.PassesThreshold(score, options.ScoreThreshold, vectorProperty.DistanceFunction))
@@ -497,15 +379,12 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
 
         var vectorProperty = _model.GetVectorPropertyOrSingle<TRecord>(new() { VectorProperty = options.VectorProperty });
         var textProperty = _model.GetFullTextDataPropertyOrSingle(options.AdditionalProperty);
-        var vector = await GetSearchVectorAsync(searchValue, vectorProperty, cancellationToken).ConfigureAwait(false);
 
         var filter = options.Filter is not null
-            ? new ChromaFilterTranslator().Translate(options.Filter, _model)
-            : ChromaFilter.All;
-        if (filter.MatchesNothing)
-        {
-            yield break;
-        }
+            ? new ChromaFilterTranslator().Translate(options.Filter, _model, _mapper.DocumentProperty)
+            : ChromaWhereOperator.All;
+
+        var vector = await GetSearchVectorAsync(searchValue, vectorProperty, cancellationToken).ConfigureAwait(false);
 
         List<string> select = [ChromaSearchKeys.Metadata, ChromaSearchKeys.Score];
         if (_mapper.HasDocument)
@@ -519,23 +398,27 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
 
         var entries = await RunOperationAsync(
             "Search",
-            () => RunOnCollectionAsync(collection => GetCollectionClient(collection).SearchAsync(
-                new ChromaSearch
-                {
-                    Where = filter.Where,
-                    WhereDocument = filter.WhereDocument,
-                    Ids = filter.Ids,
-                    Rank = GetHybridRank(vector, string.Join(" ", keywords), GetBm25IndexKey(collection, textProperty), top + options.Skip),
-                    Limit = top,
-                    Offset = options.Skip,
-                    Select = select,
-                },
-                cancellationToken: cancellationToken), cancellationToken)).ConfigureAwait(false);
+            async () =>
+            {
+                var index = await _records.FindBm25IndexAsync(textProperty.StorageName, cancellationToken).ConfigureAwait(false)
+                    ?? throw new InvalidOperationException(
+                        $"The Chroma collection '{Name}' has no BM25 index on the text of the property '{textProperty.ModelName}', which hybrid search needs. " +
+                        "Only Chroma Cloud has BM25 indexes.");
+                return await _records.SearchAsync(
+                    new ChromaSearch
+                    {
+                        Where = filter,
+                        Rank = ChromaRank.HybridRrf(vector, string.Join(" ", keywords), index.Key, top + options.Skip),
+                        Limit = top,
+                        Offset = options.Skip,
+                        Select = select,
+                    },
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
+            }).ConfigureAwait(false);
 
         foreach (var entry in entries)
         {
-            // Chroma ranks by the opposite of the RRF score, the lowest first: the score is the RRF score, the highest first.
-            var score = -(double)entry.Score!.Value;
+            var score = (double)entry.Score!.Value;
             if (options.ScoreThreshold is { } threshold && score < threshold)
             {
                 continue;
@@ -545,44 +428,6 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
                 _mapper.MapFromStorageToDataModel(entry.Id, entry.Embedding, entry.Metadata, entry.Document, options.IncludeVectors),
                 score);
         }
-    }
-
-    /// <summary>
-    /// Get the reciprocal rank fusion of the vector search and of the BM25 search of the keywords, each among the records it ranks
-    /// first, as many as the results and the skipped ones. A record that one of them does not rank gets the last rank in it.
-    /// </summary>
-    /// <remarks>
-    /// A keyword search finds the records with a keyword, but a sparse search of Chroma ranks every record, at a distance of
-    /// 1 minus the dot product: 1 for a record without a keyword. So the BM25 search counts only for the records at a distance
-    /// below 1, as if the others were not found. Chroma ranks by the opposite of the fused score, the lowest first.
-    /// </remarks>
-    private static ChromaRank GetHybridRank(ReadOnlyMemory<float> vector, string keywords, string bm25Key, int candidates)
-    {
-        var vectorRank = ChromaRank.Knn(vector, limit: candidates, defaultScore: candidates, returnRank: true);
-        var bm25Rank = ChromaRank.SparseKnn(keywords, bm25Key, limit: candidates, defaultScore: candidates, returnRank: true);
-        var bm25Distance = ChromaRank.SparseKnn(keywords, bm25Key, limit: candidates, defaultScore: 1);
-
-        // 1 for a record with a keyword, whose dot product is positive, and 0 for the others.
-        var hasKeyword = ChromaRank.Min(1, (1 - bm25Distance) * 1_000_000);
-
-        return -(1 / (RrfK + vectorRank) + hasKeyword / (RrfK + bm25Rank));
-    }
-
-    /// <summary>
-    /// Get the metadata key of the BM25 index on the text of the given property: the one the provider creates, or one created elsewhere,
-    /// like by the Python client of Chroma, on the metadata key of the property or on the documents for the property stored as the document.
-    /// </summary>
-    private string GetBm25IndexKey(ChromaCollection collection, DataPropertyModel property)
-    {
-        var isDocument = ChromaFieldMapping.GetDocumentProperty(_model)?.StorageName == property.StorageName;
-
-        // The client computes the vectors of the text with the function of the index, which has to be chroma_bm25.
-        return collection.SparseVectorIndexes.FirstOrDefault(index =>
-                index.Bm25Function is not null
-                && (index.SourceKey == property.StorageName || (isDocument && index.SourceKey == ChromaSearchKeys.Document)))?.Key
-            ?? throw new InvalidOperationException(
-                $"The Chroma collection '{Name}' has no BM25 index on the text of the property '{property.ModelName}', which hybrid search needs. " +
-                $"Create the collection on Chroma Cloud with {nameof(ChromaCollectionOptions)}.{nameof(ChromaCollectionOptions.CreateBm25Indexes)}.");
     }
 
     private static async ValueTask<ReadOnlyMemory<float>> GetSearchVectorAsync<TInput>(TInput searchValue, VectorPropertyModel vectorProperty, CancellationToken cancellationToken)
@@ -611,28 +456,28 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
 
         options ??= new();
 
+        if (options.IncludeVectors && _model.EmbeddingGenerationRequired)
+        {
+            throw new NotSupportedException(VectorDataStrings.IncludeVectorsNotSupportedWithEmbeddingGeneration);
+        }
+
         if (options.OrderBy?.Invoke(new()).Values is { Count: > 0 })
         {
             throw new NotSupportedException("Chroma does not support ordering.");
         }
 
-        var chromaFilter = new ChromaFilterTranslator().Translate(filter, _model);
-        if (chromaFilter.MatchesNothing)
-        {
-            yield break;
-        }
+        var chromaFilter = new ChromaFilterTranslator().Translate(filter, _model, _mapper.DocumentProperty);
 
-        // The client reads in pages: Chroma Cloud returns at most 300 records per request.
         var entries = await RunOperationAsync(
             "Get",
-            () => RunOnCollectionAsync(collection => GetCollectionClient(collection).GetAsync(
-                chromaFilter.Ids,
-                chromaFilter.Where,
-                chromaFilter.WhereDocument,
+            () => _records.GetAsync(
+                ids: null,
+                chromaFilter,
+                whereDocument: null,
                 top,
                 options.Skip,
                 GetInclude(options.IncludeVectors),
-                cancellationToken), cancellationToken)).ConfigureAwait(false);
+                cancellationToken)).ConfigureAwait(false);
 
         foreach (var entry in entries)
         {
@@ -641,11 +486,6 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
     }
 
     /// <inheritdoc />
-    /// <remarks>
-    /// The collection answers <see cref="IKeywordHybridSearchable{TRecord}"/> only with
-    /// <see cref="ChromaCollectionOptions.CreateBm25Indexes"/> and a full-text indexed <see langword="string"/> property, where hybrid
-    /// search can work: callers like the <c>TextSearchStore</c> of Semantic Kernel ask for it to choose hybrid search over vector search.
-    /// </remarks>
     public override object? GetService(Type serviceType, object? serviceKey = null)
     {
         Throw.IfNull(serviceType);
@@ -654,7 +494,8 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
             serviceKey is not null ? null :
             serviceType == typeof(VectorStoreCollectionMetadata) ? _collectionMetadata :
             serviceType == typeof(ChromaClient) ? _chromaClient.Client :
-            serviceType == typeof(IKeywordHybridSearchable<TRecord>) ? (_bm25Properties.Count > 0 ? this : null) :
+            // Hybrid search needs the BM25 indexes, which the client creates only on Chroma Cloud.
+            serviceType == typeof(IKeywordHybridSearchable<TRecord>) ? (_bm25Properties.Count > 0 && _chromaClient.Client.Options.IsChromaCloud ? this : null) :
             serviceType.IsInstanceOfType(this) ? this :
             null;
     }
@@ -665,82 +506,21 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
             | (_mapper.HasDocument ? ChromaGetInclude.Documents : 0);
 
     /// <summary>
-    /// Run an operation on the Chroma collection. Its id is kept after the first lookup, and a collection deleted and created
-    /// again elsewhere has a new id: when Chroma no longer finds the kept id, the collection is looked up again by name, once.
-    /// </summary>
-    private async Task<T> RunOnCollectionAsync<T>(Func<ChromaCollection, Task<T>> operation, CancellationToken cancellationToken)
-    {
-        var wasKept = _chromaCollection is not null;
-        try
-        {
-            return await operation(await GetChromaCollectionAsync(cancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
-        }
-        catch (ChromaException exception) when (wasKept && IsCollectionNotFound(exception))
-        {
-            _chromaCollection = null;
-            return await operation(await GetChromaCollectionAsync(cancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
-        }
-    }
-
-    private Task RunOnCollectionAsync(Func<ChromaCollection, Task> operation, CancellationToken cancellationToken)
-        => RunOnCollectionAsync<bool>(async collection =>
-        {
-            await operation(collection).ConfigureAwait(false);
-            return true;
-        }, cancellationToken);
-
-    private static bool IsCollectionNotFound(ChromaException exception)
-        => exception.ErrorType == "NotFoundError" || exception.StatusCode == System.Net.HttpStatusCode.NotFound;
-
-    /// <summary>
-    /// Get the Chroma collection, reading it the first time; record operations need its id.
-    /// </summary>
-    private async Task<ChromaCollection> GetChromaCollectionAsync(CancellationToken cancellationToken)
-        => _chromaCollection ??= VerifySpace(await _chromaClient.Client.GetCollectionAsync(Name, cancellationToken: cancellationToken).ConfigureAwait(false));
-
-    // The collection clients of one ChromaClient share what it keeps, like the server version.
-    private ChromaCollectionClient GetCollectionClient(ChromaCollection collection)
-        => _chromaClient.Client.GetCollectionClient(collection);
-
-    /// <summary>
-    /// Check that the collection uses the space of the distance function of the vector property: the scores are computed from
-    /// the distances that Chroma returns, so the distances of another space, like the l2 that Chroma uses by default, would give
-    /// wrong scores. A collection whose space Chroma does not report is accepted.
-    /// </summary>
-    private ChromaCollection VerifySpace(ChromaCollection collection)
-    {
-        var expectedSpace = ChromaCollectionCreateMapping.GetSpace(_model.VectorProperty);
-
-        return collection.Space is { } space && space != expectedSpace
-            ? throw new InvalidOperationException(
-                $"The Chroma collection '{Name}' uses the space '{space}', but the distance function '{_model.VectorProperty.DistanceFunction ?? DistanceFunction.CosineSimilarity}' " +
-                $"of the vector property '{_model.VectorProperty.ModelName}' needs the space '{expectedSpace}'. " +
-                $"Use a distance function of the space '{space}', or another collection.")
-            : collection;
-    }
-
-    /// <summary>
-    /// Run the given operation and wrap any <see cref="ChromaException"/> or <see cref="HttpRequestException"/> with <see cref="VectorStoreException"/>.
+    /// Run the given operation and wrap any <see cref="ChromaException"/> with <see cref="VectorStoreException"/>.
     /// </summary>
     /// <param name="operationName">The type of database operation being run.</param>
     /// <param name="operation">The operation to run.</param>
     /// <returns>The result of the operation.</returns>
     private Task RunOperationAsync(string operationName, Func<Task> operation)
-        => VectorStoreErrorHandler.RunOperationAsync<HttpRequestException>(
-            _collectionMetadata,
-            operationName,
-            () => VectorStoreErrorHandler.RunOperationAsync<ChromaException>(_collectionMetadata, operationName, operation));
+        => VectorStoreErrorHandler.RunOperationAsync<ChromaException>(_collectionMetadata, operationName, operation);
 
     /// <summary>
-    /// Run the given operation and wrap any <see cref="ChromaException"/> or <see cref="HttpRequestException"/> with <see cref="VectorStoreException"/>.
+    /// Run the given operation and wrap any <see cref="ChromaException"/> with <see cref="VectorStoreException"/>.
     /// </summary>
     /// <typeparam name="T">The response type of the operation.</typeparam>
     /// <param name="operationName">The type of database operation being run.</param>
     /// <param name="operation">The operation to run.</param>
     /// <returns>The result of the operation.</returns>
     private Task<T> RunOperationAsync<T>(string operationName, Func<Task<T>> operation)
-        => VectorStoreErrorHandler.RunOperationAsync<T, HttpRequestException>(
-            _collectionMetadata,
-            operationName,
-            () => VectorStoreErrorHandler.RunOperationAsync<T, ChromaException>(_collectionMetadata, operationName, operation));
+        => VectorStoreErrorHandler.RunOperationAsync<T, ChromaException>(_collectionMetadata, operationName, operation);
 }

@@ -28,6 +28,7 @@ public sealed class ChromaTextSearchStoreTests : IAsyncLifetime
 
         this._store = new ChromaVectorStore(
             new ChromaClient(ChromaTestStore.Instance.ChromaOptions, ChromaTestStore.Instance.HttpClient),
+            ownsClient: false,
             new() { EmbeddingGenerator = new WordEmbeddingGenerator(Dimensions) });
         await this._store.EnsureCollectionDeletedAsync(CollectionName);
     }

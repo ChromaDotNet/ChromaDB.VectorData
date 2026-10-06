@@ -1,4 +1,4 @@
-// Licensed to the .NET Foundation under one or more agreements.
+﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using ChromaDB.Client;
@@ -7,44 +7,29 @@ using Microsoft.Shared.Diagnostics;
 namespace ChromaDB.VectorData;
 
 /// <summary>
-/// The <see cref="ChromaClient"/> of a vector store or of a collection, which reads metadata exactly. A vector store shares it with
-/// the collections it returns, and the <see cref="HttpClient"/> it owns is disposed when the last of them is disposed.
+/// The <see cref="ChromaClient"/> of a vector store or of a collection. A vector store shares it with the collections it returns,
+/// and the <see cref="ChromaClient"/> it owns is disposed when the last of them is disposed.
 /// </summary>
 internal sealed class SharedChromaClient : IDisposable
 {
-    private readonly HttpClient? _ownedHttpClient;
+    private readonly ChromaClient? _ownedClient;
     private int _referenceCount = 1;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="SharedChromaClient"/> class with a client of its own.
+    /// Initializes a new instance of the <see cref="SharedChromaClient"/> class.
     /// </summary>
-    /// <param name="options">The options used to connect to Chroma.</param>
-    /// <param name="httpClient">The <see cref="HttpClient"/> used to send the requests to Chroma.</param>
-    /// <param name="ownsClient">A value indicating whether <paramref name="httpClient"/> is disposed with the last of the vector store and its collections.</param>
-    public SharedChromaClient(ChromaConfigurationOptions options, HttpClient httpClient, bool ownsClient)
-    {
-        Throw.IfNull(options);
-        Throw.IfNull(httpClient);
-
-        // Strings in metadata stay strings, and lists come back as lists of values, not as JSON.
-        Client = new ChromaClient(options.WithMetadataValues(ChromaMetadataValues.Exact), httpClient);
-        _ownedHttpClient = ownsClient ? httpClient : null;
-    }
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="SharedChromaClient"/> class with a client that the caller owns.
-    /// </summary>
-    /// <param name="chromaClient">The Chroma client, for example from the dependency injection container.</param>
-    public SharedChromaClient(ChromaClient chromaClient)
+    /// <param name="chromaClient">Chroma client that can be used to manage the collections and records in a Chroma store.</param>
+    /// <param name="ownsClient">A value indicating whether <paramref name="chromaClient"/> is disposed with the last of the vector store and its collections.</param>
+    public SharedChromaClient(ChromaClient chromaClient, bool ownsClient)
     {
         Throw.IfNull(chromaClient);
 
-        // A client with the same HttpClient and options, which reads metadata exactly also when the one of the caller does not.
-        Client = chromaClient.WithMetadataValues(ChromaMetadataValues.Exact);
+        Client = chromaClient;
+        _ownedClient = ownsClient ? chromaClient : null;
     }
 
     /// <summary>
-    /// Gets the client, which reads metadata exactly.
+    /// Gets the client.
     /// </summary>
     public ChromaClient Client { get; }
 
@@ -58,7 +43,7 @@ internal sealed class SharedChromaClient : IDisposable
     /// </summary>
     public SharedChromaClient Share()
     {
-        if (_ownedHttpClient is not null)
+        if (_ownedClient is not null)
         {
             Interlocked.Increment(ref _referenceCount);
         }
@@ -69,9 +54,9 @@ internal sealed class SharedChromaClient : IDisposable
     /// <inheritdoc />
     public void Dispose()
     {
-        if (_ownedHttpClient is not null && Interlocked.Decrement(ref _referenceCount) == 0)
+        if (_ownedClient is not null && Interlocked.Decrement(ref _referenceCount) == 0)
         {
-            _ownedHttpClient.Dispose();
+            _ownedClient.Dispose();
         }
     }
 }

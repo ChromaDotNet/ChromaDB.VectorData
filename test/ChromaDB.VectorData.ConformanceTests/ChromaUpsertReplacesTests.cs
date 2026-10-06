@@ -96,10 +96,11 @@ public sealed class ChromaUpsertReplacesTests : IAsyncLifetime
         try
         {
             await collection.UpsertAsync(new Item { Key = "u", Text = "pool and spa", Vector = new float[] { 1, 0 } });
-            Assert.True(await HasMetadataKeyAsync("Text_bm25"));
+            // Text is the only full-text property, so it is the document, whose BM25 vector the client keeps under document_bm25.
+            Assert.True(await HasMetadataKeyAsync("document_bm25"));
 
             await collection.UpsertAsync(new Item { Key = "u", Text = null, Vector = new float[] { 1, 0 } });
-            Assert.False(await HasMetadataKeyAsync("Text_bm25"));
+            Assert.False(await HasMetadataKeyAsync("document_bm25"));
         }
         finally
         {

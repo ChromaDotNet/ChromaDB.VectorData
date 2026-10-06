@@ -31,7 +31,7 @@ var definition = new VectorStoreCollectionDefinition
 };
 
 using var httpClient = new HttpClient();
-using var vectorStore = new ChromaVectorStore(new ChromaClient(new ChromaConfigurationOptions(uri), httpClient));
+using var vectorStore = new ChromaVectorStore(new ChromaClient(new ChromaConfigurationOptions(uri), httpClient), ownsClient: false);
 using var collection = vectorStore.GetDynamicCollection("native-aot", definition);
 
 await collection.EnsureCollectionDeletedAsync();
@@ -59,7 +59,7 @@ try
 
     // The vector store registered with dependency injection, without reflection too: its collections are dynamic.
     var services = new ServiceCollection();
-    services.AddChromaVectorStore(new ChromaConfigurationOptions(uri));
+    services.AddChromaVectorStore(uri);
     await using var serviceProvider = services.BuildServiceProvider();
     using var registered = serviceProvider.GetRequiredService<VectorStore>().GetDynamicCollection("native-aot", definition);
     Check("the vector store of dependency injection reads the records", await registered.GetAsync("a") is { } fromServices && fromServices["Key"] is "a");

@@ -44,7 +44,9 @@ public sealed class ChromaExistingCollectionTests : IAsyncLifetime
         using var collection = ChromaTestStore.Instance.DefaultVectorStore.GetCollection<string, CosineRecord>(CollectionName);
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () => await collection.SearchAsync(new float[] { 0, 0 }, top: 1).ToListAsync());
-        await Assert.ThrowsAsync<InvalidOperationException>(() => collection.EnsureCollectionExistsAsync());
+        // The client refuses to open the collection with another space.
+        var exception = await Assert.ThrowsAsync<VectorStoreException>(() => collection.EnsureCollectionExistsAsync());
+        Assert.IsType<ChromaException>(exception.InnerException);
     }
 
     [Fact]

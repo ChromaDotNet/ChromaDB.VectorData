@@ -1,10 +1,13 @@
-// Licensed to the .NET Foundation under one or more agreements.
+﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System;
+using System.Diagnostics;
+using ChromaDB.VectorData;
 using Microsoft.Extensions.VectorData;
 using Xunit;
 
-namespace ChromaDB.VectorData.UnitTests;
+namespace Chroma.UnitTests;
 
 /// <summary>
 /// Contains tests for the <see cref="ChromaCollectionSearchMapping"/> class.
@@ -29,8 +32,19 @@ public class ChromaCollectionSearchMappingTests
     [InlineData(DistanceFunction.CosineDistance, 0.4, 0.3, false)]
     [InlineData(DistanceFunction.EuclideanDistance, 1.5, 2, true)]
     [InlineData(DistanceFunction.EuclideanDistance, 2.5, 2, false)]
-    public void PassesThresholdKeepsTheSimilarAndTheNear(string distanceFunction, double score, double threshold, bool expected)
+    [InlineData(null, 0.8, 0.7, true)]
+    [InlineData(DistanceFunction.DotProductSimilarity, 0.8, 0.7, true)]
+    [InlineData(DistanceFunction.DotProductSimilarity, 0.6, 0.7, false)]
+    [InlineData(DistanceFunction.NegativeDotProductSimilarity, -0.8, -0.7, true)]
+    [InlineData(DistanceFunction.NegativeDotProductSimilarity, -0.6, -0.7, false)]
+    [InlineData(DistanceFunction.EuclideanSquaredDistance, 2, 4, true)]
+    [InlineData(DistanceFunction.EuclideanSquaredDistance, 5, 4, false)]
+    public void PassesThresholdKeepsTheSimilarAndTheNear(string? distanceFunction, double score, double threshold, bool expected)
         => Assert.Equal(expected, ChromaCollectionSearchMapping.PassesThreshold(score, threshold, distanceFunction));
+
+    [Fact]
+    public void ToScoreThrowsForADistanceFunctionTheModelBuilderRejects()
+        => Assert.Throws<UnreachableException>(() => ChromaCollectionSearchMapping.ToScore(0.25f, DistanceFunction.ManhattanDistance));
 
     [Fact]
     public void PassesThresholdWithoutThresholdKeepsEverything()

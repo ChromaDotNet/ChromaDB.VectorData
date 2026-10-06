@@ -1,8 +1,8 @@
-// Licensed to the .NET Foundation under one or more agreements.
+﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Diagnostics;
-using System.Text;
+using ChromaDB.Client;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.VectorData.ProviderServices;
 
@@ -11,7 +11,7 @@ namespace ChromaDB.VectorData;
 /// <summary>
 /// A record as Chroma stores it: an id, an embedding and metadata.
 /// </summary>
-internal readonly record struct ChromaStorageRecord(string Id, ReadOnlyMemory<float> Embedding, Dictionary<string, object>? Metadata, string? Document);
+internal readonly record struct ChromaStorageRecord(string Id, ReadOnlyMemory<float> Embedding, IReadOnlyDictionary<string, object>? Metadata, string? Document);
 
 /// <summary>
 /// Mapper between a Chroma record and the consumer data model.
@@ -20,10 +20,10 @@ internal readonly record struct ChromaStorageRecord(string Id, ReadOnlyMemory<fl
 internal sealed class ChromaMapper<TRecord>(CollectionModel model)
     where TRecord : class
 {
-    /// <summary>The most bytes of a metadata value in Chroma Cloud.</summary>
-    private const int MaxMetadataValueBytes = 8182;
-
     private readonly DataPropertyModel? _documentProperty = ChromaFieldMapping.GetDocumentProperty(model);
+
+    /// <summary>Gets the property stored as the Chroma document: the only string property with full-text indexing, or <see langword="null"/>.</summary>
+    public DataPropertyModel? DocumentProperty => _documentProperty;
 
     /// <summary>Gets a value indicating whether the records have a Chroma document, from the full-text property.</summary>
     public bool HasDocument => _documentProperty is not null;
@@ -34,22 +34,10 @@ internal sealed class ChromaMapper<TRecord>(CollectionModel model)
         var key = keyProperty.GetValueAsObject(dataModel)
             ?? throw new InvalidOperationException($"Missing key property '{keyProperty.ModelName}' on provided record of type '{typeof(TRecord).Name}'.");
 
-        // Chroma metadata has no null values, and Chroma drops empty lists: neither is stored, and both come back as null.
-        // They are marked with null here: the collection deletes them from a record that exists, which keeps its old metadata otherwise.
-        // The text of the property stored as the document goes in the metadata too, for the filters on it, when it fits: Chroma Cloud
-        // takes at most 8,182 bytes per metadata value, and twice as much per document.
-        Dictionary<string, object>? metadata = null;
-        foreach (var property in model.DataProperties)
-        {
-            (metadata ??= []).Add(
-                property.StorageName,
-                ChromaFieldMapping.ToMetadataValue(property.GetValueAsObject(dataModel)) switch
-                {
-                    null or System.Collections.ICollection { Count: 0 } => null!,
-                    string text when property == _documentProperty && Encoding.UTF8.GetByteCount(text) > MaxMetadataValueBytes => null!,
-                    var value => value
-                });
-        }
+        // The property stored as the document is the document.
+        var metadata = ChromaMetadataConvert.ToMetadata(model.DataProperties
+            .Where(property => property != _documentProperty)
+            .Select(property => new KeyValuePair<string, object?>(property.StorageName, property.GetValueAsObject(dataModel))));
 
         // There is exactly one vector property, as verified by the model builder.
         Debug.Assert(
@@ -61,20 +49,18 @@ internal sealed class ChromaMapper<TRecord>(CollectionModel model)
                 ? model.VectorProperty.GetValueAsObject(dataModel)
                 : generatedEmbeddings[0]![recordIndex]);
 
-        // The full-text property is the document; the collection empties the document of a record that exists for a null text.
         var document = _documentProperty?.GetValueAsObject(dataModel) as string;
 
         return new ChromaStorageRecord(ChromaFieldMapping.ToId(key), embedding, metadata, document);
 
+        // The model builder accepts these three vector types only, and the model checks the values of a dynamic record.
         static ReadOnlyMemory<float> GetVector(PropertyModel property, object? embedding)
             => embedding switch
             {
-                ReadOnlyMemory<float> m => m,
+                null => throw new InvalidOperationException($"Vector property '{property.ModelName}' on provided record of type '{typeof(TRecord).Name}' may not be null."),
                 Embedding<float> e => e.Vector,
                 float[] a => a,
-
-                null => throw new InvalidOperationException($"Vector property '{property.ModelName}' on provided record of type '{typeof(TRecord).Name}' may not be null."),
-                var unknownEmbedding => throw new InvalidOperationException($"Vector property '{property.ModelName}' on provided record of type '{typeof(TRecord).Name}' has unsupported embedding type '{unknownEmbedding.GetType().Name}'.")
+                _ => (ReadOnlyMemory<float>)embedding
             };
     }
 
@@ -82,36 +68,42 @@ internal sealed class ChromaMapper<TRecord>(CollectionModel model)
     {
         var outputRecord = model.CreateRecord<TRecord>()!;
 
-        model.KeyProperty.SetValueAsObject(
-            outputRecord,
-            (Nullable.GetUnderlyingType(model.KeyProperty.Type) ?? model.KeyProperty.Type) == typeof(Guid) ? Guid.Parse(id) : id);
+        // The model builder accepts string and Guid keys only.
+        model.KeyProperty.SetValueAsObject(outputRecord, model.KeyProperty.Type == typeof(Guid) ? Guid.Parse(id) : id);
 
         if (includeVectors && embedding is { } vector)
         {
+            // The model builder accepts ReadOnlyMemory<float>, Embedding<float> and float[] only.
             var property = model.VectorProperty;
+            var vectorType = Nullable.GetUnderlyingType(property.Type) ?? property.Type;
             property.SetValueAsObject(
                 outputRecord,
-                (Nullable.GetUnderlyingType(property.Type) ?? property.Type) switch
-                {
-                    var t when t == typeof(ReadOnlyMemory<float>) => vector,
-                    var t when t == typeof(Embedding<float>) => new Embedding<float>(vector),
-                    var t when t == typeof(float[]) => vector.ToArray(),
-
-                    _ => throw new UnreachableException()
-                });
+                vectorType == typeof(Embedding<float>) ? new Embedding<float>(vector)
+                    : vectorType == typeof(float[]) ? vector.ToArray()
+                    : (object)vector);
         }
 
         foreach (var dataProperty in model.DataProperties)
         {
-            if (metadata is not null && metadata.TryGetValue(dataProperty.StorageName, out var value))
+            if (dataProperty == _documentProperty)
             {
-                dataProperty.SetValueAsObject(outputRecord, ChromaFieldMapping.FromMetadataValue(value, dataProperty.Type));
-            }
-            else if (dataProperty == _documentProperty && document is { Length: > 0 })
-            {
-                // A text too long for the metadata, or written by another Chroma client, is in the document only; an empty
-                // document is the one of a null text.
                 dataProperty.SetValueAsObject(outputRecord, document);
+            }
+            else if (metadata is not null && metadata.TryGetValue(dataProperty.StorageName, out var value))
+            {
+                object? propertyValue;
+                try
+                {
+                    propertyValue = ChromaMetadataConvert.FromMetadataValue(value, dataProperty.Type);
+                }
+                // Another Chroma client can write any value under the key of a property: a value of another type, a date that
+                // does not parse, or a number too large for the property.
+                catch (InvalidCastException exception)
+                {
+                    throw ReadFailed(dataProperty, id, exception);
+                }
+
+                dataProperty.SetValueAsObject(outputRecord, propertyValue);
             }
             else if (!dataProperty.Type.IsValueType || Nullable.GetUnderlyingType(dataProperty.Type) is not null)
             {
@@ -121,5 +113,8 @@ internal sealed class ChromaMapper<TRecord>(CollectionModel model)
         }
 
         return outputRecord;
+
+        static InvalidOperationException ReadFailed(DataPropertyModel property, string id, Exception exception)
+            => new($"Failed to read the metadata key '{property.StorageName}' of the record '{id}' into the property '{property.ModelName}' of type '{property.Type.Name}'.", exception);
     }
 }

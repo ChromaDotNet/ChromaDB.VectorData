@@ -56,11 +56,10 @@ internal sealed class ChromaTestStore : TestStore
     /// </summary>
     public ChromaCollection<string, TRecord> CreateCollectionWithBm25Indexes<TRecord>(string name, VectorStoreCollectionDefinition definition)
         where TRecord : class
-        => new(new ChromaClient(this.ChromaOptions, this.HttpClient), name, new() { Definition = definition, CreateBm25Indexes = true });
+        => new(new ChromaClient(this.ChromaOptions, this.HttpClient), name, ownsClient: false, new() { Definition = definition });
 
     public ChromaVectorStore GetVectorStore(ChromaVectorStoreOptions options)
-        => new(this.ChromaOptions,
-            this.HttpClient,
+        => new(new ChromaClient(this.ChromaOptions, this.HttpClient),
             ownsClient: false, // The client is shared, it's not owned by the vector store.
             new()
             {
@@ -117,7 +116,7 @@ internal sealed class ChromaTestStore : TestStore
 
         this._httpClient = new HttpClient();
         // The vector store does not own a ChromaClient it is given; GetVectorStore covers the constructor with options.
-        this.DefaultVectorStore = new ChromaVectorStore(new ChromaClient(this.ChromaOptions, this._httpClient));
+        this.DefaultVectorStore = new ChromaVectorStore(new ChromaClient(this.ChromaOptions, this._httpClient), ownsClient: false);
 
         if (this._container is null)
         {

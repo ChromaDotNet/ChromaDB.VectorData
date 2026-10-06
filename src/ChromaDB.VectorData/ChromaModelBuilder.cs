@@ -1,8 +1,9 @@
-// Licensed to the .NET Foundation under one or more agreements.
+﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.VectorData;
 using Microsoft.Extensions.VectorData.ProviderServices;
 
 namespace ChromaDB.VectorData;
@@ -28,6 +29,31 @@ internal class ChromaModelBuilder() : CollectionModelBuilder(s_modelBuildingOpti
         {
             throw new NotSupportedException(
                 $"Property '{keyProperty.ModelName}' has unsupported type '{type.Name}'. Key properties must be either string or Guid.");
+        }
+    }
+
+    // Checked when the collection object is constructed, rather than when it is first used.
+    protected override void ValidateProperty(PropertyModel propertyModel, VectorStoreCollectionDefinition? definition)
+    {
+        base.ValidateProperty(propertyModel, definition);
+
+        switch (propertyModel)
+        {
+            case VectorPropertyModel vectorProperty:
+                if (vectorProperty.IndexKind is not null and not IndexKind.Hnsw)
+                {
+                    throw new NotSupportedException(
+                        $"Index kind '{vectorProperty.IndexKind}' for {nameof(VectorStoreVectorProperty)} '{vectorProperty.ModelName}' is not supported by the Chroma VectorStore. " +
+                        $"Supported index kinds: {IndexKind.Hnsw}.");
+                }
+
+                // Throws for a distance function Chroma does not support.
+                _ = ChromaCollectionCreateMapping.GetSpace(vectorProperty);
+                break;
+
+            case DataPropertyModel { IsFullTextIndexed: true } dataProperty when dataProperty.Type != typeof(string):
+                throw new InvalidOperationException(
+                    $"Property '{dataProperty.ModelName}' has {nameof(VectorStoreDataProperty.IsFullTextIndexed)} set, but is not a string: Chroma indexes the text of string properties only.");
         }
     }
 
@@ -67,7 +93,7 @@ internal class ChromaModelBuilder() : CollectionModelBuilder(s_modelBuildingOpti
 
     internal static bool IsVectorPropertyTypeValidCore(Type type, [NotNullWhen(false)] out string? supportedTypes)
     {
-        supportedTypes = "ReadOnlyMemory<float>, Embedding<float>, or float[]";
+        supportedTypes = SupportedVectorTypes;
 
         return type == typeof(ReadOnlyMemory<float>)
             || type == typeof(ReadOnlyMemory<float>?)

@@ -1,4 +1,4 @@
-// Licensed to the .NET Foundation under one or more agreements.
+﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using Microsoft.Extensions.VectorData;
@@ -21,21 +21,5 @@ public sealed class ChromaCollectionOptions : VectorStoreCollectionOptions
 
     internal ChromaCollectionOptions(ChromaCollectionOptions? source) : base(source)
     {
-        CreateBm25Indexes = source?.CreateBm25Indexes ?? false;
     }
-
-    /// <summary>
-    /// Gets or sets a value indicating whether creating the collection also creates a BM25 index, a sparse vector index of Chroma,
-    /// for each string property with full-text indexing, which hybrid search needs. The default is <see langword="false"/>.
-    /// </summary>
-    /// <remarks>
-    /// Only Chroma Cloud has sparse vector indexes: a single Chroma server rejects them. The index of a property is on the metadata
-    /// key of the property followed by <c>_bm25</c>: ChromaDotNet.Client computes the BM25 vectors from its text as it writes the records,
-    /// and Chroma applies the inverse document frequency to them. Hybrid search also works on a
-    /// collection created elsewhere, like by the Python client of Chroma, with a BM25 index on the text of the property, or on the
-    /// documents for the property stored as the document. Only with this option the collection answers
-    /// <see cref="IKeywordHybridSearchable{TRecord}"/> from <c>GetService</c>, which the <c>TextSearchStore</c> of Semantic Kernel asks
-    /// for to choose hybrid search: without it, Semantic Kernel searches by vector.
-    /// </remarks>
-    public bool CreateBm25Indexes { get; set; }
 }

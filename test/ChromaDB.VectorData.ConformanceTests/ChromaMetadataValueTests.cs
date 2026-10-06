@@ -77,15 +77,16 @@ public sealed class ChromaMetadataValueTests : IAsyncLifetime
     }
 
     [Theory]
-    [InlineData(DateTimeKind.Unspecified)]
-    [InlineData(DateTimeKind.Local)]
-    [InlineData(DateTimeKind.Utc)]
-    public async Task Equality_on_a_DateTime_compares_ticks_whatever_the_kind(DateTimeKind filterKind)
+    [InlineData(DateTimeKind.Unspecified, false)]
+    [InlineData(DateTimeKind.Local, false)]
+    [InlineData(DateTimeKind.Utc, true)]
+    public async Task Equality_on_a_DateTime_compares_the_ticks_and_the_kind(DateTimeKind filterKind, bool found)
     {
+        // A DateTime is stored as round-trip text with its kind, as in the Qdrant provider: a filter finds the same ticks with the same kind.
         await this._collection.UpsertAsync(new Record { Key = "a", Updated = new DateTime(2026, 10, 5, 11, 0, 0, DateTimeKind.Utc), Vector = new float[] { 1, 2, 3 } });
 
         var sameTicks = new DateTime(2026, 10, 5, 11, 0, 0, filterKind);
-        Assert.Equal("a", Assert.Single(await this._collection.GetAsync(r => r.Updated == sameTicks, top: 10).ToListAsync()).Key);
+        Assert.Equal(found ? 1 : 0, (await this._collection.GetAsync(r => r.Updated == sameTicks, top: 10).ToListAsync()).Count);
     }
 
     [Fact]

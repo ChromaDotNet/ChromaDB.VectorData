@@ -1,6 +1,7 @@
-// Licensed to the .NET Foundation under one or more agreements.
+﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Diagnostics;
 using Microsoft.Extensions.VectorData;
 
 namespace ChromaDB.VectorData;
@@ -29,7 +30,8 @@ internal static class ChromaCollectionSearchMapping
             DistanceFunction.EuclideanSquaredDistance => distance,
             DistanceFunction.EuclideanDistance => Math.Sqrt(distance),
 
-            _ => throw new NotSupportedException($"Distance function '{distanceFunction}' is not supported by the Chroma VectorStore.")
+            // The model builder rejects the other distance functions.
+            _ => throw new UnreachableException($"Distance function '{distanceFunction}' is not supported by the Chroma VectorStore.")
         };
 
     /// <summary>

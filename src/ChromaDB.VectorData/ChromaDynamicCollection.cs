@@ -1,4 +1,4 @@
-// Licensed to the .NET Foundation under one or more agreements.
+﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using ChromaDB.Client;
@@ -15,24 +15,12 @@ public sealed class ChromaDynamicCollection : ChromaCollection<object, Dictionar
     /// <summary>
     /// Initializes a new instance of the <see cref="ChromaDynamicCollection"/> class.
     /// </summary>
-    /// <param name="chromaOptions">The options used to connect to Chroma.</param>
-    /// <param name="httpClient">The <see cref="HttpClient"/> used to send the requests to Chroma.</param>
+    /// <param name="chromaClient">Chroma client that can be used to manage the collections and records in a Chroma store.</param>
     /// <param name="name">The name of the collection.</param>
-    /// <param name="ownsClient">A value indicating whether <paramref name="httpClient"/> is disposed when the collection is disposed.</param>
+    /// <param name="ownsClient">A value indicating whether <paramref name="chromaClient"/> is disposed when the collection is disposed.</param>
     /// <param name="options">Optional configuration options for this class.</param>
-    public ChromaDynamicCollection(ChromaConfigurationOptions chromaOptions, HttpClient httpClient, string name, bool ownsClient, ChromaCollectionOptions options)
-        : this(() => new SharedChromaClient(chromaOptions, httpClient, ownsClient), name, options)
-    {
-    }
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="ChromaDynamicCollection"/> class.
-    /// </summary>
-    /// <param name="chromaClient">The Chroma client, for example from the dependency injection container. The collection does not dispose it.</param>
-    /// <param name="name">The name of the collection.</param>
-    /// <param name="options">Optional configuration options for this class.</param>
-    public ChromaDynamicCollection(ChromaClient chromaClient, string name, ChromaCollectionOptions options)
-        : this(() => new SharedChromaClient(chromaClient), name, options)
+    public ChromaDynamicCollection(ChromaClient chromaClient, string name, bool ownsClient, ChromaCollectionOptions options)
+        : this(() => new SharedChromaClient(chromaClient, ownsClient), name, options)
     {
     }
 

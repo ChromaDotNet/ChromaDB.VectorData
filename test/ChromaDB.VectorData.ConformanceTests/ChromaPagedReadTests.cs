@@ -24,7 +24,7 @@ public sealed class ChromaPagedReadTests : IAsyncLifetime
         await ChromaTestStore.Instance.ReferenceCountingStartAsync();
 
         this._httpClient = new HttpClient(this._handler);
-        this._store = new ChromaVectorStore(new ChromaClient(ChromaTestStore.Instance.ChromaOptions.WithBatchSplitting(maxBatchSize: 2), this._httpClient));
+        this._store = new ChromaVectorStore(new ChromaClient(ChromaTestStore.Instance.ChromaOptions.WithBatchSplitting(maxBatchSize: 2), this._httpClient), ownsClient: false);
         this._collection = this._store.GetCollection<string, Record>("paged-read");
         await this._collection.EnsureCollectionDeletedAsync();
         await this._collection.EnsureCollectionExistsAsync();

@@ -1,13 +1,30 @@
-// Licensed to the .NET Foundation under one or more agreements.
+﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using ChromaDB.VectorData;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.VectorData;
+using Microsoft.Extensions.VectorData.ProviderServices;
 
-namespace ChromaDB.VectorData.UnitTests;
+namespace Chroma.UnitTests;
 
-public sealed class Hotel<TKey>
+/// <summary>
+/// Builds the model of a test record, as the collection does.
+/// </summary>
+internal static class ChromaTestModel
+{
+    public static CollectionModel Build<TRecord>(IEmbeddingGenerator? embeddingGenerator = null)
+        => new ChromaModelBuilder().Build(
+            typeof(TRecord),
+            typeof(TRecord).GetProperties().Single(property => property.IsDefined(typeof(VectorStoreKeyAttribute), inherit: false)).PropertyType,
+            definition: null,
+            embeddingGenerator);
+}
+
+public sealed class ChromaHotel<TKey>
 {
     [VectorStoreKey]
     public TKey HotelId { get; set; } = default!;
@@ -21,7 +38,7 @@ public sealed class Hotel<TKey>
     [VectorStoreData]
     public double Price { get; set; }
 
-    [VectorStoreData]
+    [VectorStoreData(StorageName = "parking_is_included")]
     public bool Parking { get; set; }
 
     [VectorStoreData]
@@ -73,21 +90,6 @@ public sealed class TwoFullTextHotel
     public ReadOnlyMemory<float>? Embedding { get; set; }
 }
 
-public sealed class Bm25KeyClashHotel
-{
-    [VectorStoreKey]
-    public string HotelId { get; set; } = default!;
-
-    [VectorStoreData(IsFullTextIndexed = true)]
-    public string? Description { get; set; }
-
-    [VectorStoreData(StorageName = "Description_bm25")]
-    public string? Other { get; set; }
-
-    [VectorStoreVector(4)]
-    public ReadOnlyMemory<float>? Embedding { get; set; }
-}
-
 public sealed class FullTextHotel
 {
     [VectorStoreKey]
@@ -101,4 +103,58 @@ public sealed class FullTextHotel
 
     [VectorStoreVector(4)]
     public ReadOnlyMemory<float>? Embedding { get; set; }
+}
+
+public sealed class NumberHotel
+{
+    [VectorStoreKey]
+    public string HotelId { get; set; } = default!;
+
+    [VectorStoreData]
+    public long Visits { get; set; }
+
+    [VectorStoreData]
+    public float Stars { get; set; }
+
+    [VectorStoreVector(4)]
+    public ReadOnlyMemory<float>? Embedding { get; set; }
+}
+
+public sealed class EmbeddingHotel
+{
+    [VectorStoreKey]
+    public string HotelId { get; set; } = default!;
+
+    [VectorStoreVector(4)]
+    public Embedding<float>? Embedding { get; set; }
+}
+
+public sealed class ArrayHotel
+{
+    [VectorStoreKey]
+    public string HotelId { get; set; } = default!;
+
+    [VectorStoreVector(4)]
+    public float[]? Embedding { get; set; }
+}
+
+public sealed class TextHotel
+{
+    [VectorStoreKey]
+    public string HotelId { get; set; } = default!;
+
+    [VectorStoreVector(4)]
+    public string? Embedding { get; set; }
+}
+
+public sealed class FullTextTextHotel
+{
+    [VectorStoreKey]
+    public string HotelId { get; set; } = default!;
+
+    [VectorStoreData(IsFullTextIndexed = true)]
+    public string? Description { get; set; }
+
+    [VectorStoreVector(4)]
+    public string? Embedding { get; set; }
 }

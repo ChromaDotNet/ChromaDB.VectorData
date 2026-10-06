@@ -1,4 +1,4 @@
-// Licensed to the .NET Foundation under one or more agreements.
+﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Diagnostics.CodeAnalysis;
@@ -31,27 +31,14 @@ public sealed class ChromaVectorStore : VectorStore
 
     private readonly IEmbeddingGenerator? _embeddingGenerator;
 
-    private readonly bool _createBm25Indexes;
-
     /// <summary>
     /// Initializes a new instance of the <see cref="ChromaVectorStore"/> class.
     /// </summary>
-    /// <param name="chromaOptions">The options used to connect to Chroma.</param>
-    /// <param name="httpClient">The <see cref="HttpClient"/> used to send the requests to Chroma.</param>
-    /// <param name="ownsClient">A value indicating whether <paramref name="httpClient"/> is disposed once the vector store and the collections it returns are all disposed.</param>
+    /// <param name="chromaClient">Chroma client that can be used to manage the collections and records in a Chroma store.</param>
+    /// <param name="ownsClient">A value indicating whether <paramref name="chromaClient"/> is disposed after the vector store and the collections it returns are all disposed.</param>
     /// <param name="options">Optional configuration options for this class.</param>
-    public ChromaVectorStore(ChromaConfigurationOptions chromaOptions, HttpClient httpClient, bool ownsClient, ChromaVectorStoreOptions? options = default)
-        : this(new SharedChromaClient(chromaOptions, httpClient, ownsClient), options)
-    {
-    }
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="ChromaVectorStore"/> class.
-    /// </summary>
-    /// <param name="chromaClient">The Chroma client, for example from the dependency injection container. The vector store does not dispose it.</param>
-    /// <param name="options">Optional configuration options for this class.</param>
-    public ChromaVectorStore(ChromaClient chromaClient, ChromaVectorStoreOptions? options = default)
-        : this(new SharedChromaClient(chromaClient), options)
+    public ChromaVectorStore(ChromaClient chromaClient, bool ownsClient, ChromaVectorStoreOptions? options = default)
+        : this(new SharedChromaClient(chromaClient, ownsClient), options)
     {
     }
 
@@ -68,7 +55,6 @@ public sealed class ChromaVectorStore : VectorStore
 
         options ??= ChromaVectorStoreOptions.Default;
         _embeddingGenerator = options.EmbeddingGenerator;
-        _createBm25Indexes = options.CreateBm25Indexes;
 
         _metadata = new()
         {
@@ -98,8 +84,7 @@ public sealed class ChromaVectorStore : VectorStore
             : new ChromaCollection<TKey, TRecord>(_chromaClient.Share, name, new()
             {
                 Definition = definition,
-                EmbeddingGenerator = _embeddingGenerator,
-                CreateBm25Indexes = _createBm25Indexes
+                EmbeddingGenerator = _embeddingGenerator
             });
 
     /// <inheritdoc />
@@ -111,21 +96,19 @@ public sealed class ChromaVectorStore : VectorStore
         => new ChromaDynamicCollection(_chromaClient.Share, name, new ChromaCollectionOptions()
         {
             Definition = definition,
-            EmbeddingGenerator = _embeddingGenerator,
-            CreateBm25Indexes = _createBm25Indexes
+            EmbeddingGenerator = _embeddingGenerator
         });
 #pragma warning restore IDE0090
 
     /// <inheritdoc />
     public override async IAsyncEnumerable<string> ListCollectionNamesAsync([EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var collections = await VectorStoreErrorHandler.RunOperationAsync<IReadOnlyList<ChromaCollection>, HttpRequestException>(
+        const string OperationName = "ListCollectionNames";
+
+        var collections = await VectorStoreErrorHandler.RunOperationAsync<IReadOnlyList<ChromaCollection>, ChromaException>(
             _metadata,
-            "ListCollections",
-            () => VectorStoreErrorHandler.RunOperationAsync<IReadOnlyList<ChromaCollection>, ChromaException>(
-                _metadata,
-                "ListCollections",
-                () => _chromaClient.Client.ListCollectionsAsync(cancellationToken: cancellationToken))).ConfigureAwait(false);
+            OperationName,
+            () => _chromaClient.Client.ListCollectionsAsync(cancellationToken: cancellationToken)).ConfigureAwait(false);
 
         foreach (var collection in collections)
         {

@@ -1,15 +1,16 @@
-// Licensed to the .NET Foundation under one or more agreements.
+﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System;
 using System.Linq;
 using System.Text.Json.Nodes;
 using ChromaDB.Client;
+using ChromaDB.VectorData;
 using Microsoft.Extensions.VectorData;
 using Microsoft.Extensions.VectorData.ProviderServices;
 using Xunit;
 
-namespace ChromaDB.VectorData.UnitTests;
+namespace Chroma.UnitTests;
 
 /// <summary>
 /// Contains tests for the <see cref="ChromaCollectionCreateMapping"/> class.
@@ -51,25 +52,15 @@ public class ChromaCollectionCreateMappingTests
     }
 
     [Fact]
-    public void MapCollectionDefinitionThrowsForFlatIndex()
-    {
-        // Arrange.
-        var vectorProperty = new VectorPropertyModel("Vector", typeof(ReadOnlyMemory<float>)) { IndexKind = IndexKind.Flat };
-
-        // Act and assert.
-        Assert.Throws<NotSupportedException>(() => ChromaCollectionCreateMapping.MapCollectionDefinition("hotels", vectorProperty, []));
-    }
-
-    [Fact]
     public void MapCollectionDefinitionAddsASchemaForTheBm25Properties()
     {
         // Arrange.
-        var model = BuildModel(typeof(TwoFullTextHotel));
+        var model = ChromaTestModel.Build<TwoFullTextHotel>();
 
         // Act.
         var definition = ChromaCollectionCreateMapping.MapCollectionDefinition("hotels", model.VectorProperty, ChromaCollectionCreateMapping.GetBm25Properties(model));
 
-        // Assert: an index on each property, from its text, with the BM25 function of Chroma; the client adds the space.
+        // Assert.
         var expected =
             """{"defaults":{},"keys":{"Description_bm25":"""
             + """{"sparse_vector":{"sparse_vector_index":{"enabled":true,"config":{"source_key":"Description","bm25":true,"embedding_function":{"type":"known","name":"chroma_bm25","config":{"k":1.2,"b":0.75,"avg_doc_length":256,"token_max_length":40,"include_tokens":false}}}}}},"Review_bm25":"""
@@ -81,35 +72,21 @@ public class ChromaCollectionCreateMappingTests
     [Fact]
     public void MapCollectionDefinitionTakesTheBm25VectorsOfTheDocumentPropertyFromTheDocument()
     {
-        // Arrange: the only full-text property is stored as the document, which holds also a text too long for the metadata.
-        var model = BuildModel(typeof(FullTextHotel));
+        // Arrange: the only full-text property is stored as the document.
+        var model = ChromaTestModel.Build<FullTextHotel>();
 
         // Act.
         var definition = ChromaCollectionCreateMapping.MapCollectionDefinition("hotels", model.VectorProperty, ChromaCollectionCreateMapping.GetBm25Properties(model), ChromaFieldMapping.GetDocumentProperty(model));
 
         // Assert.
-        Assert.Contains("\"Description_bm25\":{\"sparse_vector\":{\"sparse_vector_index\":{\"enabled\":true,\"config\":{", definition.Schema!.ToString());
+        Assert.Contains("\"document_bm25\":{\"sparse_vector\":{\"sparse_vector_index\":{\"enabled\":true,\"config\":{", definition.Schema!.ToString());
         Assert.Contains("\"source_key\":\"#document\"", definition.Schema.ToString());
     }
 
     [Fact]
     public void GetBm25PropertiesTakesTheStringPropertiesWithFullTextIndexing()
     {
-        Assert.Equal(["Description", "Review"], ChromaCollectionCreateMapping.GetBm25Properties(BuildModel(typeof(TwoFullTextHotel))).Select(p => p.ModelName));
-        Assert.Empty(ChromaCollectionCreateMapping.GetBm25Properties(BuildModel(typeof(Hotel<string>))));
+        Assert.Equal(["Description", "Review"], ChromaCollectionCreateMapping.GetBm25Properties(ChromaTestModel.Build<TwoFullTextHotel>()).Select(p => p.ModelName));
+        Assert.Empty(ChromaCollectionCreateMapping.GetBm25Properties(ChromaTestModel.Build<ChromaHotel<string>>()));
     }
-
-    [Fact]
-    public void GetBm25KeyAddsASuffixToTheStorageName()
-    {
-        var property = ChromaCollectionCreateMapping.GetBm25Properties(BuildModel(typeof(TwoFullTextHotel)))[0];
-        property.StorageName = "description";
-
-        Assert.Equal("description_bm25", ChromaCollectionCreateMapping.GetBm25Key(property));
-    }
-
-#pragma warning disable IL2026, IL3050 // The test models are not trimmed
-    private static CollectionModel BuildModel(Type recordType)
-        => new ChromaModelBuilder().Build(recordType, typeof(string), definition: null, defaultEmbeddingGenerator: null);
-#pragma warning restore IL2026, IL3050
 }
