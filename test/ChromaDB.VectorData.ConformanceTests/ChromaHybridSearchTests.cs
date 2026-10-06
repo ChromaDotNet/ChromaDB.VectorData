@@ -71,10 +71,10 @@ public class ChromaHybridSearchTests(ChromaHybridSearchTests.VectorAndStringFixt
             => ChromaTestStore.Instance.CreateCollectionWithBm25Indexes<VectorAndStringRecord<string>>(this.CollectionName, this.CreateRecordDefinition());
 
         public override ValueTask InitializeAsync()
-            => ChromaTestStore.IsChromaCloud ? base.InitializeAsync() : ValueTask.CompletedTask;
+            => ChromaTestStore.IsChromaCloud ? base.InitializeAsync() : default;
 
         public override ValueTask DisposeAsync()
-            => ChromaTestStore.IsChromaCloud ? base.DisposeAsync() : ValueTask.CompletedTask;
+            => ChromaTestStore.IsChromaCloud ? base.DisposeAsync() : default;
     }
 
     public new class MultiTextFixture : HybridSearchTests<string>.MultiTextFixture
@@ -85,9 +85,9 @@ public class ChromaHybridSearchTests(ChromaHybridSearchTests.VectorAndStringFixt
             => ChromaTestStore.Instance.CreateCollectionWithBm25Indexes<MultiTextStringRecord<string>>(this.CollectionName, this.CreateRecordDefinition());
 
         public override ValueTask InitializeAsync()
-            => ChromaTestStore.IsChromaCloud ? base.InitializeAsync() : ValueTask.CompletedTask;
+            => ChromaTestStore.IsChromaCloud ? base.InitializeAsync() : default;
 
         public override ValueTask DisposeAsync()
-            => ChromaTestStore.IsChromaCloud ? base.DisposeAsync() : ValueTask.CompletedTask;
+            => ChromaTestStore.IsChromaCloud ? base.DisposeAsync() : default;
     }
 }

@@ -22,4 +22,9 @@
     <PackageReference Include="Microsoft.Extensions.VectorData.ConformanceTests" />
   </ItemGroup>
 
+  <ItemGroup Condition=" '$(TargetFramework)' == 'net472' ">
+    <Reference Include="System.Net.Http" />
+    <Using Include="System.Net.Http" />
+  </ItemGroup>
+
 </Project>
