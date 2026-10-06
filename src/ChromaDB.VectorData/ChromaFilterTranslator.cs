@@ -70,21 +70,22 @@ internal sealed class ChromaFilterTranslator : FilterTranslatorBase
         return true;
     }
 
-    private ChromaWhereOperator Translate(Expression node)
+    // negated: whether the node is under an odd number of negations.
+    private ChromaWhereOperator Translate(Expression node, bool negated = false)
         => node switch
         {
             BinaryExpression { NodeType: ExpressionType.Equal } equal => TranslateEqual(equal.Left, equal.Right),
             BinaryExpression { NodeType: ExpressionType.NotEqual } notEqual => ChromaWhereOperator.Not(TranslateEqual(notEqual.Left, notEqual.Right)),
 
-            BinaryExpression { NodeType: ExpressionType.GreaterThan } comparison => TranslateComparison(comparison, greater: true, orEqual: false),
-            BinaryExpression { NodeType: ExpressionType.GreaterThanOrEqual } comparison => TranslateComparison(comparison, greater: true, orEqual: true),
-            BinaryExpression { NodeType: ExpressionType.LessThan } comparison => TranslateComparison(comparison, greater: false, orEqual: false),
-            BinaryExpression { NodeType: ExpressionType.LessThanOrEqual } comparison => TranslateComparison(comparison, greater: false, orEqual: true),
+            BinaryExpression { NodeType: ExpressionType.GreaterThan } comparison => TranslateComparison(comparison, greater: true, orEqual: false, negated),
+            BinaryExpression { NodeType: ExpressionType.GreaterThanOrEqual } comparison => TranslateComparison(comparison, greater: true, orEqual: true, negated),
+            BinaryExpression { NodeType: ExpressionType.LessThan } comparison => TranslateComparison(comparison, greater: false, orEqual: false, negated),
+            BinaryExpression { NodeType: ExpressionType.LessThanOrEqual } comparison => TranslateComparison(comparison, greater: false, orEqual: true, negated),
 
-            BinaryExpression { NodeType: ExpressionType.AndAlso } andAlso => Translate(andAlso.Left) & Translate(andAlso.Right),
-            BinaryExpression { NodeType: ExpressionType.OrElse } orElse => Translate(orElse.Left) | Translate(orElse.Right),
+            BinaryExpression { NodeType: ExpressionType.AndAlso } andAlso => Translate(andAlso.Left, negated) & Translate(andAlso.Right, negated),
+            BinaryExpression { NodeType: ExpressionType.OrElse } orElse => Translate(orElse.Left, negated) | Translate(orElse.Right, negated),
 
-            UnaryExpression { NodeType: ExpressionType.Not } not => ChromaWhereOperator.Not(Translate(not.Operand)),
+            UnaryExpression { NodeType: ExpressionType.Not } not => ChromaWhereOperator.Not(Translate(not.Operand, !negated)),
 
             // A bool property as a condition: r => r.Bool.
             Expression when node.Type == typeof(bool) && TryBindDataProperty(node, out var property)
@@ -123,7 +124,7 @@ internal sealed class ChromaFilterTranslator : FilterTranslatorBase
         return ChromaWhereOperator.Equal(property.StorageName, ToFilterValue(value));
     }
 
-    private ChromaWhereOperator TranslateComparison(BinaryExpression comparison, bool greater, bool orEqual)
+    private ChromaWhereOperator TranslateComparison(BinaryExpression comparison, bool greater, bool orEqual, bool negated)
     {
         // Normalize to property-on-the-left: 5 < r.Int is r.Int > 5.
         DataPropertyModel? property;
@@ -144,6 +145,13 @@ internal sealed class ChromaFilterTranslator : FilterTranslatorBase
         if (value is null)
         {
             return ChromaWhereOperator.None;
+        }
+
+        // In C# the negation is true for a null value, which the negated comparison of Chroma does not match.
+        if (negated && Nullable.GetUnderlyingType(property.Type) is not null)
+        {
+            throw new NotSupportedException(
+                $"Chroma does not support a negated comparison on the nullable property '{property.ModelName}': it would leave out the records where the property is null.");
         }
 
         if (value is not (int or long or float or double))

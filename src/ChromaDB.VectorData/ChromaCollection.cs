@@ -55,6 +55,9 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
     /// <summary>The properties to create a BM25 index for when the collection is created.</summary>
     private readonly List<DataPropertyModel> _bm25Properties;
 
+    /// <summary>Whether the collection was disposed: it releases its share of the client only once.</summary>
+    private int _disposed;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="ChromaCollection{TKey, TRecord}"/> class.
     /// </summary>
@@ -129,7 +132,11 @@ public class ChromaCollection<TKey, TRecord> : VectorStoreCollection<TKey, TReco
     /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
-        _chromaClient.Dispose();
+        if (Interlocked.Exchange(ref _disposed, 1) == 0)
+        {
+            _chromaClient.Dispose();
+        }
+
         base.Dispose(disposing);
     }
 

@@ -25,7 +25,7 @@ public sealed class ChromaVectorStoreOptions
     }
 
     /// <summary>
-    /// Gets or sets the default embedding generator to use when generating vectors embeddings with this vector store.
+    /// Gets or sets the default embedding generator to use when generating vector embeddings with this vector store.
     /// </summary>
     public IEmbeddingGenerator? EmbeddingGenerator { get; set; }
 }

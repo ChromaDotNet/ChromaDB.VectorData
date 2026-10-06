@@ -9,6 +9,7 @@ using ChromaDB.Client;
 using ChromaDB.Client.Models;
 using ChromaDB.VectorData;
 using Moq;
+using Moq.Protected;
 using Xunit;
 
 namespace Chroma.UnitTests;
@@ -76,5 +77,46 @@ public class ChromaVectorStoreTests
 
         // Assert.
         Assert.Equal(["collection1", "collection2"], collectionNames);
+    }
+
+    [Fact]
+    public void DisposingTwiceReleasesTheClientOnce()
+    {
+        // Arrange.
+        this._chromaClientMock.Protected().Setup("Dispose", ItExpr.IsAny<bool>());
+        var sut = new ChromaVectorStore(this._chromaClientMock.Object, ownsClient: true);
+        var collection = sut.GetCollection<string, ChromaHotel<string>>(TestCollectionName);
+
+        // Act: the collection still uses the client after the store is disposed.
+        sut.Dispose();
+        sut.Dispose();
+        this._chromaClientMock.Protected().Verify("Dispose", Times.Never(), ItExpr.IsAny<bool>());
+        collection.Dispose();
+        collection.Dispose();
+
+        // Assert.
+        this._chromaClientMock.Protected().Verify("Dispose", Times.Once(), ItExpr.IsAny<bool>());
+    }
+
+    [Fact]
+    public async Task CollectionExistsAndEnsureCollectionDeletedReleaseTheClientAsync()
+    {
+        // Arrange.
+        this._chromaClientMock.Protected().Setup("Dispose", ItExpr.IsAny<bool>());
+        this._chromaClientMock
+            .Setup(x => x.CollectionExistsAsync(TestCollectionName, null, null, this._testCancellationToken))
+            .ReturnsAsync(true);
+        this._chromaClientMock
+            .Setup(x => x.DeleteCollectionIfExistsAsync(TestCollectionName, null, null, true, this._testCancellationToken))
+            .ReturnsAsync(true);
+        var sut = new ChromaVectorStore(this._chromaClientMock.Object, ownsClient: true);
+
+        // Act.
+        Assert.True(await sut.CollectionExistsAsync(TestCollectionName, this._testCancellationToken));
+        await sut.EnsureCollectionDeletedAsync(TestCollectionName, this._testCancellationToken);
+        sut.Dispose();
+
+        // Assert.
+        this._chromaClientMock.Protected().Verify("Dispose", Times.Once(), ItExpr.IsAny<bool>());
     }
 }

@@ -31,6 +31,9 @@ public sealed class ChromaVectorStore : VectorStore
 
     private readonly IEmbeddingGenerator? _embeddingGenerator;
 
+    /// <summary>Whether the store was disposed: it releases its share of the client only once.</summary>
+    private int _disposed;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="ChromaVectorStore"/> class.
     /// </summary>
@@ -66,7 +69,11 @@ public sealed class ChromaVectorStore : VectorStore
     /// <inheritdoc/>
     protected override void Dispose(bool disposing)
     {
-        _chromaClient.Dispose();
+        if (Interlocked.Exchange(ref _disposed, 1) == 0)
+        {
+            _chromaClient.Dispose();
+        }
+
         base.Dispose(disposing);
     }
 
@@ -117,17 +124,17 @@ public sealed class ChromaVectorStore : VectorStore
     }
 
     /// <inheritdoc />
-    public override Task<bool> CollectionExistsAsync(string name, CancellationToken cancellationToken = default)
+    public override async Task<bool> CollectionExistsAsync(string name, CancellationToken cancellationToken = default)
     {
-        var collection = GetDynamicCollection(name, s_generalPurposeDefinition);
-        return collection.CollectionExistsAsync(cancellationToken);
+        using var collection = GetDynamicCollection(name, s_generalPurposeDefinition);
+        return await collection.CollectionExistsAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
-    public override Task EnsureCollectionDeletedAsync(string name, CancellationToken cancellationToken = default)
+    public override async Task EnsureCollectionDeletedAsync(string name, CancellationToken cancellationToken = default)
     {
-        var collection = GetDynamicCollection(name, s_generalPurposeDefinition);
-        return collection.EnsureCollectionDeletedAsync(cancellationToken);
+        using var collection = GetDynamicCollection(name, s_generalPurposeDefinition);
+        await collection.EnsureCollectionDeletedAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />

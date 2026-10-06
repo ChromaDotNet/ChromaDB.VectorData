@@ -228,6 +228,14 @@ public class ChromaFilterTranslatorTests
     }
 
     [Fact]
+    public void ThrowsForANegatedComparisonOnANullableProperty()
+    {
+        Assert.Throws<NotSupportedException>(() => Translate(h => !(h.Rating > 4)));
+        Assert.Throws<NotSupportedException>(() => Translate(h => !(h.Rating > 4 && h.Parking)));
+        Assert.Equal("""{"Rating":{"$gt":4}}""", Translate(h => !!(h.Rating > 4)));
+    }
+
+    [Fact]
     public void ThrowsForAFilterOnTheVector()
         => Assert.Throws<NotSupportedException>(() => Translate<ArrayHotel>(h => h.Embedding!.Contains(1f)));
 
