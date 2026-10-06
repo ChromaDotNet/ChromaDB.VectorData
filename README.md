@@ -37,3 +37,5 @@ Hybrid search needs the Search API and the sparse vector indexes of Chroma Cloud
 ## Origin
 
 The provider started as a copy, under the MIT license, of the Qdrant provider in [CommunityToolkit/AI](https://github.com/CommunityToolkit/AI). It was then adapted to Chroma.
+
+It is now proposed back to the AI Community Toolkit, as `CommunityToolkit.VectorData.Chroma`, in [CommunityToolkit/AI#58](https://github.com/CommunityToolkit/AI/pull/58). This repository publishes it until the toolkit ships that package. Then this repository will be archived, and the package deprecated in favor of that one. The API is the same, so moving changes only the package reference and the namespace, from `ChromaDB.VectorData` to `CommunityToolkit.VectorData.Chroma`.
