@@ -153,7 +153,7 @@ A single Chroma server has neither the Search API nor sparse vector indexes. On 
   - When a record has its text in the document only, the provider reads it into that property.
   - A null text is stored as no document. For a record that has a document, it is stored as an empty one, since Chroma keeps the old document when it gets a null one.
   - An empty document reads back as null.
-- NativeAOT and trimming: the dynamic collection works without reflection. You get it from `GetDynamicCollection` with a `VectorStoreCollectionDefinition`. `ChromaCollection<TKey, TRecord>` maps the properties of the record type by reflection. The `AddChroma…` registration methods are marked as incompatible with trimming and NativeAOT. There, register the vector store yourself, like `services.AddSingleton<VectorStore>(sp => new ChromaVectorStore(sp.GetRequiredService<ChromaClient>()));`.
+- NativeAOT and trimming: the dynamic collection works without reflection. You get it from `GetDynamicCollection` with a `VectorStoreCollectionDefinition`. `ChromaCollection<TKey, TRecord>` maps the properties of the record type by reflection. `AddChromaVectorStore` and `AddKeyedChromaVectorStore` work with trimming and NativeAOT. `AddChromaCollection` and `AddKeyedChromaCollection` map a record type, so they are marked as incompatible. There, register the vector store and get the collection from it with `GetDynamicCollection`.
 
 ## Limitations
 
