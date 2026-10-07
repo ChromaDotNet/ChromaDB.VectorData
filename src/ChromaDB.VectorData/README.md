@@ -160,6 +160,7 @@ A single Chroma server has neither the Search API nor sparse vector indexes: the
 - A `DateTime` filter finds the same ticks with the same `Kind`.
 - Array properties need Chroma 1.5.0 or later.
 - Hybrid search needs Chroma Cloud.
+- On Chroma Cloud, a vector search returns at most 300 results, `Skip` included, the default quota of Chroma Cloud: beyond that, Chroma Cloud answers with a quota error.
 - Only one property can be the document. With more than one full-text indexed string property, none is.
 
 In CI, the provider runs the Microsoft.Extensions.VectorData conformance tests against Chroma 1.5.0, 1.5.9 and the latest release. On Chroma Cloud, the tests are run by hand, hybrid search included, and they pass.
