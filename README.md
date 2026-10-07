@@ -3,6 +3,7 @@
 # ChromaDB.VectorData
 
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/ChromaDotNet/ChromaDB.VectorData/badge)](https://scorecard.dev/viewer/?uri=github.com/ChromaDotNet/ChromaDB.VectorData)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/15279/badge)](https://www.bestpractices.dev/projects/15279)
 
 A [Chroma](https://www.trychroma.com/) provider for [Microsoft.Extensions.VectorData](https://learn.microsoft.com/dotnet/ai/vector-stores/overview). It is built on [ChromaDB.Client](https://github.com/ChromaDotNet/ChromaDB.Client) and published as the `ChromaDotNet.VectorData` package. It has the same code as `CommunityToolkit.VectorData.Chroma`, proposed in [CommunityToolkit/AI#58](https://github.com/CommunityToolkit/AI/pull/58), and moves to it when that package ships.
 
