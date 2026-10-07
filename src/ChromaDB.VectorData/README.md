@@ -2,7 +2,7 @@
 
 # ChromaDotNet.VectorData
 
-A [Chroma](https://www.trychroma.com/) provider for [Microsoft.Extensions.VectorData](https://learn.microsoft.com/dotnet/ai/vector-stores/overview), built on [ChromaDotNet.Client](https://github.com/ChromaDotNet/ChromaDB.Client).
+A [Chroma](https://www.trychroma.com/) provider for [Microsoft.Extensions.VectorData](https://learn.microsoft.com/dotnet/ai/vector-stores/overview), built on [ChromaDotNet.Client](https://github.com/ChromaDotNet/ChromaDB.Client). It has the same code as `CommunityToolkit.VectorData.Chroma`, proposed in [CommunityToolkit/AI#58](https://github.com/CommunityToolkit/AI/pull/58), and moves to it when that package ships.
 
 > This is a community project. It is not affiliated with or endorsed by Chroma.
 
