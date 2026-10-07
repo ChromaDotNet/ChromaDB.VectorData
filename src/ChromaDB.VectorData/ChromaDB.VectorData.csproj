@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   
   <PropertyGroup>
-    <VersionPrefix>0.4.1</VersionPrefix>
+    <VersionPrefix>0.4.2</VersionPrefix>
     <AssemblyName>ChromaDB.VectorData</AssemblyName>
     <PackageId>ChromaDotNet.VectorData</PackageId>
     <RootNamespace>$(AssemblyName)</RootNamespace>
@@ -11,7 +11,7 @@
     <Title>Chroma provider for Microsoft.Extensions.VectorData</Title>
     <Description>Microsoft.Extensions.VectorData provider for Chroma and Chroma Cloud, built on ChromaDotNet.Client. Community project, not affiliated with Chroma.</Description>
     <PackageTags>chroma chromadb chroma-cloud vector-database vectordata ai</PackageTags>
-    <PackageReleaseNotes>0.4.1: This version needs ChromaDotNet.Client 2.10.2. On Chroma Cloud, a filter on the keys with a large top, like GetAsync(r => r.Key == "a", top: 1000), no longer goes over the quota of 300 records per request: the client asks for at most as many records as there are keys. All the releases: https://github.com/ChromaDotNet/ChromaDB.VectorData/releases</PackageReleaseNotes>
+    <PackageReleaseNotes>0.4.2: This version needs ChromaDotNet.Client 2.11.0. The README says that array and list properties, like the namespaces of the TextSearchStore of Semantic Kernel, need Chroma 1.5.0 or later. All the releases: https://github.com/ChromaDotNet/ChromaDB.VectorData/releases</PackageReleaseNotes>
   </PropertyGroup>
   
   <ItemGroup>

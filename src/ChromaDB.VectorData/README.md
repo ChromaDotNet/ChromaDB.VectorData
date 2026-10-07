@@ -158,7 +158,7 @@ A single Chroma server has neither the Search API nor sparse vector indexes: the
 - `GetAsync` with a filter does not support ordering.
 - Comparisons work on numbers only. A negated comparison, like `!(r.Rating > 3)`, is not supported on a nullable property: Chroma would leave out the records where the property is null.
 - A `DateTime` filter finds the same ticks with the same `Kind`.
-- Array properties need Chroma 1.5.0 or later.
+- Array and list properties, like the namespaces of the `TextSearchStore` of Semantic Kernel, need Chroma 1.5.0 or later.
 - Hybrid search needs Chroma Cloud.
 - On Chroma Cloud, a vector search returns at most 300 results, `Skip` included, the default quota of Chroma Cloud: beyond that, Chroma Cloud answers with a quota error.
 - Only one property can be the document. With more than one full-text indexed string property, none is.
