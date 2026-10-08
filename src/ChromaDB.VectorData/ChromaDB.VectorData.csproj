@@ -9,7 +9,7 @@
     <IsAotCompatible Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">true</IsAotCompatible>
 
     <Title>Chroma provider for Microsoft.Extensions.VectorData</Title>
-    <Description>Microsoft.Extensions.VectorData provider for Chroma and Chroma Cloud, built on ChromaDotNet.Client. Community project, not affiliated with Chroma.</Description>
+    <Description>Microsoft.Extensions.VectorData provider for Chroma and Chroma Cloud, built on ChromaDotNet.Client. It has the same code as CommunityToolkit.VectorData.Chroma, proposed to the AI Community Toolkit, and moves to it when that package ships. Community project, not affiliated with Chroma.</Description>
     <PackageTags>chroma chromadb chroma-cloud vector-database vectordata ai</PackageTags>
     <PackageReleaseNotes>0.4.2: This version needs ChromaDotNet.Client 2.11.0. The README says that array and list properties, like the namespaces of the TextSearchStore of Semantic Kernel, need Chroma 1.5.0 or later. All the releases: https://github.com/ChromaDotNet/ChromaDB.VectorData/releases</PackageReleaseNotes>
   </PropertyGroup>
