@@ -136,7 +136,7 @@ A single Chroma server has neither the Search API nor sparse vector indexes: the
 - Dates are stored as ISO 8601 strings. A `DateTimeOffset` is stored in UTC, so it comes back as the same instant with offset zero. A `DateTime` is stored with its `Kind`.
 - Targets .NET 10, .NET 8, .NET Standard 2.0 and .NET Framework 4.6.2. NativeAOT needs .NET 8 or later.
 - Distance functions: `CosineSimilarity` (the default), `CosineDistance`, `DotProductSimilarity`, `NegativeDotProductSimilarity`, `EuclideanDistance` and `EuclideanSquaredDistance`, with the HNSW index.
-- An existing collection must use the space of the distance function. A collection created by another Chroma client without a space uses l2. If the space differs, creating or searching the collection throws, rather than turning the distances of another space into scores.
+- An existing collection must use the space of the distance function. A collection created by another Chroma client without a space uses l2. If the space differs, creating or searching the collection throws, rather than turning the distances of another space into scores. On Chroma 1.0.0 to 1.0.5 the server does not report the space, so the check cannot be done: use Chroma 1.0.6 or later.
 - Filters:
   - `==` and `!=`
   - `<`, `<=`, `>` and `>=` on numbers
