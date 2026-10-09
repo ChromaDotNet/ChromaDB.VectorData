@@ -5,7 +5,7 @@
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/ChromaDotNet/ChromaDB.VectorData/badge)](https://scorecard.dev/viewer/?uri=github.com/ChromaDotNet/ChromaDB.VectorData)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/15279/badge)](https://www.bestpractices.dev/projects/15279)
 
-> **Moved to [CommunityToolkit.VectorData.Chroma](https://www.nuget.org/packages/CommunityToolkit.VectorData.Chroma),** in the [AI Community Toolkit](https://github.com/CommunityToolkit/AI), where the provider is developed now. The `ChromaDotNet.VectorData` package is deprecated, and this repository will be archived.
+> **Moved to [CommunityToolkit.VectorData.Chroma](https://www.nuget.org/packages/CommunityToolkit.VectorData.Chroma),** in the [AI Community Toolkit](https://github.com/CommunityToolkit/AI), where the provider is developed now. The `ChromaDotNet.VectorData` package is deprecated, and this repository is archived.
 
 ## Moving
 

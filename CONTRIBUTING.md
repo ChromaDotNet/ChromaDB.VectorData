@@ -1,6 +1,6 @@
 # Contributing
 
-The provider moved to [CommunityToolkit.VectorData.Chroma](https://www.nuget.org/packages/CommunityToolkit.VectorData.Chroma) and is developed in [CommunityToolkit/AI](https://github.com/CommunityToolkit/AI): open issues and pull requests there. This repository will be archived.
+The provider moved to [CommunityToolkit.VectorData.Chroma](https://www.nuget.org/packages/CommunityToolkit.VectorData.Chroma) and is developed in [CommunityToolkit/AI](https://github.com/CommunityToolkit/AI): open issues and pull requests there. This repository is archived.
 
 ## Build and test
 
