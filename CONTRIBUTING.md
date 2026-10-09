@@ -1,10 +1,10 @@
 # Contributing
 
-Issues and pull requests are welcome.
+The provider moved to [CommunityToolkit.VectorData.Chroma](https://www.nuget.org/packages/CommunityToolkit.VectorData.Chroma) and is developed in [CommunityToolkit/AI](https://github.com/CommunityToolkit/AI): open issues and pull requests there. This repository will be archived.
 
 ## Build and test
 
-See [Building and testing](README.md#building-and-testing) for:
+See [Building and testing](https://github.com/ChromaDotNet/ChromaDB.VectorData/blob/v0.4.3/README.md#building-and-testing), in the README of 0.4.3, for:
 
 - the commands
 - Docker

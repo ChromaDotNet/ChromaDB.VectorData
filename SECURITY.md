@@ -2,7 +2,9 @@
 
 ## Supported versions
 
-Security fixes go into the latest release of `ChromaDotNet.VectorData` on NuGet. Earlier versions do not get fixes: update to the latest one.
+`ChromaDotNet.VectorData` is deprecated: 0.4.4 is its last release, and no version gets fixes any more, security fixes included. Move to [CommunityToolkit.VectorData.Chroma](https://www.nuget.org/packages/CommunityToolkit.VectorData.Chroma), the same provider in the [AI Community Toolkit](https://github.com/CommunityToolkit/AI).
+
+The form below takes reports about this package. It also takes reports about `CommunityToolkit.VectorData.Chroma`, and we pass them privately to the maintainers of the AI Community Toolkit. A vulnerability in `ChromaDotNet.Client` goes to its [security policy](https://github.com/ChromaDotNet/ChromaDB.Client/blob/main/SECURITY.md).
 
 ## Reporting a vulnerability
 
@@ -16,7 +18,7 @@ Include the version of the package, the version of Chroma or Chroma Cloud, and t
 
 - We acknowledge the report within 7 days.
 - We confirm or rule out the vulnerability within 14 days, and keep you informed of the progress.
-- A confirmed vulnerability is fixed in a new release. A GitHub security advisory follows the release, with credit to you unless you prefer otherwise.
+- A confirmed vulnerability gets a GitHub security advisory that says which package to move to, with credit to you unless you prefer otherwise. This package gets no new release.
 - Please keep the details private until the advisory is published, and for at most 90 days from the report.
 
 ## How the package is published
