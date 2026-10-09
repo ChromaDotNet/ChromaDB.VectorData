@@ -25,9 +25,7 @@ The registrations, like `AddChromaVectorStore`, keep their names and their names
 
 ## History
 
-ChromaDotNet.VectorData was a [Chroma](https://www.trychroma.com/) provider for [Microsoft.Extensions.VectorData](https://learn.microsoft.com/dotnet/ai/vector-stores/overview), built on [ChromaDotNet.Client](https://github.com/ChromaDotNet/ChromaDB.Client). From 0.4.0 it had the same code as `CommunityToolkit.VectorData.Chroma`, which the AI Community Toolkit accepted in [CommunityToolkit/AI#58](https://github.com/CommunityToolkit/AI/pull/58). The provider is developed there now.
-
-It started as a copy, under the MIT license, of the Qdrant provider in [CommunityToolkit/AI](https://github.com/CommunityToolkit/AI), and was then adapted to Chroma. The releases and their notes are on [GitHub](https://github.com/ChromaDotNet/ChromaDB.VectorData/releases).
+A [Chroma](https://www.trychroma.com/) provider for [Microsoft.Extensions.VectorData](https://learn.microsoft.com/dotnet/ai/vector-stores/overview), built on [ChromaDotNet.Client](https://github.com/ChromaDotNet/ChromaDB.Client), published from 0.1.0 to 0.4.4. It started as a copy of the Qdrant provider in [CommunityToolkit/AI](https://github.com/CommunityToolkit/AI), under the MIT license. The AI Community Toolkit accepted it in [CommunityToolkit/AI#58](https://github.com/CommunityToolkit/AI/pull/58). The releases and their notes are on [GitHub](https://github.com/ChromaDotNet/ChromaDB.VectorData/releases).
 
 > This is a community project. It is not affiliated with or endorsed by Chroma.
 
