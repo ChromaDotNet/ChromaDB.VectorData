@@ -10,7 +10,7 @@ The form below takes reports about this package. It also takes reports about `Co
 
 Please do not report a vulnerability in a public issue, discussion or pull request.
 
-Report it privately on GitHub instead: [Report a vulnerability](https://github.com/ChromaDotNet/ChromaDB.VectorData/security/advisories/new), in the **Security** tab of this repository. Only the maintainers see the report.
+Report it privately on GitHub instead, in the [ChromaDB.Client](https://github.com/ChromaDotNet/ChromaDB.Client) repository, which has the same maintainers: [Report a vulnerability](https://github.com/ChromaDotNet/ChromaDB.Client/security/advisories/new). This repository is archived and does not take reports. Only the maintainers see the report.
 
 Include the version of the package, the version of Chroma or Chroma Cloud, and the steps to reproduce the problem.
 
