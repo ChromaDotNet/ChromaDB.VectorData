@@ -4,7 +4,7 @@
 
 `ChromaDotNet.VectorData` is deprecated: 0.4.4 is its last release, and no version gets fixes any more, security fixes included. Move to [CommunityToolkit.VectorData.Chroma](https://www.nuget.org/packages/CommunityToolkit.VectorData.Chroma), the same provider in the [AI Community Toolkit](https://github.com/CommunityToolkit/AI).
 
-A vulnerability in `CommunityToolkit.VectorData.Chroma` goes to the AI Community Toolkit. A vulnerability in `ChromaDotNet.Client` goes to its [security policy](https://github.com/ChromaDotNet/ChromaDB.Client/blob/main/SECURITY.md).
+The form below takes reports about this package. It also takes reports about `CommunityToolkit.VectorData.Chroma`, and we pass them privately to the maintainers of the AI Community Toolkit. A vulnerability in `ChromaDotNet.Client` goes to its [security policy](https://github.com/ChromaDotNet/ChromaDB.Client/blob/main/SECURITY.md).
 
 ## Reporting a vulnerability
 
