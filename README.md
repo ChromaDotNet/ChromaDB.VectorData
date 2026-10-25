@@ -3,7 +3,6 @@
 # ChromaDB.VectorData
 
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/ChromaDotNet/ChromaDB.VectorData/badge)](https://scorecard.dev/viewer/?uri=github.com/ChromaDotNet/ChromaDB.VectorData)
-[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/15279/badge)](https://www.bestpractices.dev/projects/15279)
 
 > **Moved to [CommunityToolkit.VectorData.Chroma](https://www.nuget.org/packages/CommunityToolkit.VectorData.Chroma)**, in the [AI Community Toolkit](https://github.com/CommunityToolkit/AI). This package is deprecated and this repository is archived.
 
