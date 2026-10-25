@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   
   <PropertyGroup>
-    <VersionPrefix>0.4.4</VersionPrefix>
+    <VersionPrefix>0.4.5</VersionPrefix>
     <AssemblyName>ChromaDB.VectorData</AssemblyName>
     <PackageId>ChromaDotNet.VectorData</PackageId>
     <RootNamespace>$(AssemblyName)</RootNamespace>
@@ -9,7 +9,7 @@
     <IsAotCompatible Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">true</IsAotCompatible>
 
     <Title>Chroma provider for Microsoft.Extensions.VectorData</Title>
-    <Description>Deprecated: use CommunityToolkit.VectorData.Chroma.</Description>
+    <Description>Deprecated: use CommunityToolkit.VectorData.Chroma. Independent project. Not affiliated with, endorsed by or sponsored by Chroma Inc. CHROMA is a registered trademark of Chroma Inc., used here only to describe compatibility.</Description>
     <PackageTags>chroma chromadb chroma-cloud vector-database vectordata ai</PackageTags>
     <PackageReleaseNotes>0.4.4: The last release: the provider moved to CommunityToolkit.VectorData.Chroma, in the AI Community Toolkit, with the same API. Change the package reference, and the namespace from ChromaDB.VectorData to CommunityToolkit.VectorData.Chroma. The code of 0.4.3 is unchanged. All the releases: https://github.com/ChromaDotNet/ChromaDB.VectorData/releases</PackageReleaseNotes>
   </PropertyGroup>
